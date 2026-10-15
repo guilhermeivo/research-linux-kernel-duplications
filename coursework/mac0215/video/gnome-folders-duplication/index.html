@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1d1d20;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+
+            font-family: sans-serif;
+        }
+
+        #container {
+            padding: 6px;
+            height: 100dvh;
+        }
+
+        .node {
+            opacity: 1;
+            transition: 1s ease-in-out opacity;
+
+            position: absolute;
+
+            width: 144px;
+            height: fit-content;
+
+            /* margin: 6px; */
+            padding: 6px;
+
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+
+            border-radius: 8px;
+            user-select: none;
+
+            p {
+                margin: 0;
+                font-size: 13.2px;
+
+                line-break: anywhere;
+                word-break: break-all;
+                overflow-wrap: break-word;
+
+                text-align: center;
+            }
+
+            img {
+                width: 96px;
+                height: 96px;
+
+                margin-bottom: 7px;
+            }
+        }
+
+        .node:hover {
+            background: #262629;
+            z-index: 1000;
+        }
+
+        .node:active {
+            background: #3b3b3d;
+
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+<script>
+async function getData() {
+    const url = "data.json";
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Response status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        return result
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+function createNode(container, nodeData, x, y) {
+    const node = document.createElement("div");
+    node.id = nodeData.id
+    node.className = "node"
+    node.style.top = `${y}px`
+    node.style.left = `${x}px`
+    node.style.opacity = 1
+
+    const img = document.createElement("img");
+    const p = document.createElement("p");
+
+    img.src = "text-x-generic.svg";
+
+    p.textContent = nodeData.id
+
+    node.appendChild(img)
+    node.appendChild(p)
+
+    container.appendChild(node);
+
+    return node
+}
+
+function normalizeGraph(nodes, width, height) {
+    const valid = nodes.filter(
+        n => n.x !== -1 && n.y !== -1
+    );
+
+    const xs = valid.map(n => n.x);
+    const ys = valid.map(n => n.y);
+
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const margin = 150;
+
+    nodes.forEach(node => {
+        if(node.x === -1 && node.y === -1)
+            return;
+
+        node.screenX =
+            margin +
+            ((node.x - minX) / (maxX - minX)) *
+            (width - margin * 2);
+        node.screenY =
+            margin +
+            ((node.y - minY) / (maxY - minY)) *
+            (height - margin * 2);
+    });
+}
+
+function createEdge(svg, source, target, weight) {
+    const line = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "line"
+    );
+
+    line.setAttribute("stroke", "#777777");
+    line.setAttribute("stroke-width", weight / 500);
+    line.setAttribute("stroke-opacity", 0)
+
+    svg.appendChild(line);
+
+    return {
+        element: line,
+        source,
+        target
+    };
+}
+
+function updateEdges(edges, width, height) {
+    edges.forEach(edge => {
+        const x1 = edge.source.offsetLeft +
+                   edge.source.offsetWidth / 2
+        const x2 = edge.target.offsetLeft +
+                   edge.target.offsetWidth / 2
+        const y1 = edge.source.offsetTop +
+                   edge.source.offsetHeight / 2
+        const y2 = edge.target.offsetTop +
+                   edge.target.offsetHeight / 2
+
+        if (x1 > 0 && x2 > 0 && y1 > 0 && y2 > 0 &&
+            x1 < width && x2 < width &&
+            y1 < height && y2 < height
+        ) {
+            edge.element.setAttribute("x1", x1);
+
+            edge.element.setAttribute("y1", y1);
+
+            edge.element.setAttribute("x2", x2);
+
+            edge.element.setAttribute("y2", y2);
+
+            edge.element.setAttribute("stroke-opacity", 0.8)
+        }
+    });
+}
+
+function animateNodes(data, edges, duration, width, height) {
+    const start = performance.now();
+
+    function frame(now) {
+        const progress = Math.min(
+            (now - start) / duration,
+            1
+        );
+
+        data.nodes.forEach(nodeData => {
+            const node = document.getElementById(nodeData.id);
+
+            if (!node.targetX)
+                return;
+
+            node.currentX = node.startX + (node.targetX - node.startX) * progress;
+            node.currentY = node.startY + (node.targetY - node.startY) * progress;
+
+            node.currentSize = node.startSize + (node.targetSize - node.startSize) * progress;
+
+            node.style.top = `${node.currentY}px`;
+            node.style.left = `${node.currentX}px`;
+
+            node.style.transform = `scale(${node.currentSize}, ${node.currentSize})`;
+        });
+
+        updateEdges(edges, width, height);
+
+        if(progress < 1)
+            requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+}
+
+function randomStartPosition(widthWindow, heightWindow, width, height) {
+    const side = Math.floor(Math.random() * 4);
+
+    switch(side) {
+        case 0: // esquerda
+            return {
+                x: -width * 2,
+                y: Math.random() * heightWindow
+            };
+
+        case 1: // direita
+            return {
+                x: widthWindow + width * 2,
+                y: Math.random() * heightWindow
+            };
+
+        case 2: // cima
+            return {
+                x: Math.random() * widthWindow,
+                y: -height * 2
+            };
+
+        default: // baixo
+            return {
+                x: Math.random() * widthWindow,
+                y: heightWindow + height * 2
+            };
+    }
+}
+
+(async () => {
+    const container = document.getElementById("container");
+
+    const svg = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "svg"
+    );
+
+    svg.style.position = "absolute";
+    svg.style.top = "0";
+    svg.style.left = "0";
+    svg.style.width = "100%";
+    svg.style.height = "100%";
+    svg.style.pointerEvents = "none";
+
+    container.appendChild(svg);
+
+    const data = await getData()
+
+    const maxColumn = 11
+    const maxRow = 7
+    let actualRow = 0
+    let actualColumn = 0
+
+    const width = 144
+    let height = 132
+    let lastHeight = height
+    const margin = 6
+
+    const widthWindow = margin + (width * (maxColumn - 1)) + (margin * (maxColumn - 1))
+    const heightWindow = 963 - height - margin
+
+    normalizeGraph(data.nodes, widthWindow, heightWindow)
+
+    data.nodes.forEach(node => {
+        let start;
+        if (actualRow >= maxRow) {
+            start = randomStartPosition(
+                widthWindow,
+                heightWindow,
+                width,
+                height
+            );
+        } else {
+            start = {
+                x: margin + (width * actualColumn) + (margin * actualColumn),
+                y: margin + (lastHeight * actualRow) + (margin * actualRow)
+            };
+        }
+        const nodeElement = createNode(container, node, start.x, start.y)
+
+        nodeElement.startX = start.x;
+        nodeElement.startY = start.y;
+
+        nodeElement.currentX = start.x;
+        nodeElement.currentY = start.y;
+
+        nodeElement.targetX = node.screenX;
+        nodeElement.targetY = node.screenY;
+
+        nodeElement.startSize = 1;
+
+        nodeElement.currentSize = 1;
+
+        nodeElement.targetSize = 0.75;
+
+        const nodeHeight = nodeElement.offsetHeight
+        if (nodeHeight > height)
+            height = nodeHeight
+        actualColumn += 1
+        if (actualColumn >= maxColumn) {
+            actualRow += 1
+            actualColumn = 0
+            lastHeight = height
+            height = 132
+        }
+    });
+
+    setTimeout(() => {
+        data.nodes.forEach(node => {
+            const nodeElement = document.getElementById(node.id)
+
+            if (node.x == -1 && node.y == -1) {
+                nodeElement.style.opacity = 0
+            }
+        });
+
+        const edges = [];
+
+        data.edges.forEach(edge => {
+            const source = document.getElementById(edge.source);
+            const target = document.getElementById(edge.target);
+
+            if (source.style.opacity != 0 || source.style.opacity != 0) {
+                if(source && target) {
+                    edges.push(
+                        createEdge(svg, source, target, edge.duplicated_lines)
+                    );
+                }
+            }
+        });
+
+        animateNodes(data, edges, 5000, widthWindow, heightWindow)
+    }, 5000)
+
+})()
+
+</script>
+</body>
+</html>

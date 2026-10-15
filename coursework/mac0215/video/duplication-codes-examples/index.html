@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+    <style>
+body {
+    font-family: "JetBrains Mono";
+    color: #24292f;
+    background: #ffffff;
+}
+
+pre,
+code {
+    font-family: "JetBrains Mono";
+    color: #24292f;
+}
+
+.window {
+    width: 350px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #d0d7de;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.titlebar {
+    height: 38px;
+    background: #f6f8fa;
+    border-bottom: 1px solid #d8dee4;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 0 15px;
+}
+
+.buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.buttons span {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.red {
+    background: #ff5f57;
+}
+
+.editor {
+    background: #ffffff;
+    color: #24292f;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 16px;
+    padding-top: 0;
+    border-radius: 8px;
+}
+
+.keyword {
+    color: #cf222e;
+}
+
+.type {
+    color: #8250df;
+}
+
+.function {
+    color: #0969da;
+}
+
+.variable {
+    color: #24292f;
+}
+
+.number {
+    color: #0550ae;
+}
+
+.string {
+    color: #914417;
+}
+
+.comment {
+    color: #6e7781;
+    font-style: italic;
+}
+
+.highlight {
+    background: rgba(255, 0, 0, 0.12);
+}
+
+.dark-highlight {
+    background: rgba(255, 0, 0, 0.56);
+}
+
+.red-text {
+    color: #cf222e;
+}
+
+.secondary {
+    color: #8c959f;
+}
+
+.green-text {
+    color: #1a7f37;
+}
+
+.line-green {
+    background: rgba(26, 127, 55, 0.12);
+}
+
+.line-dark-green {
+    background: rgba(26, 127, 55, 0.56);
+}
+    </style>
+</head>
+<body>
+    <!-- <div class="window">
+        <div class="titlebar">
+            <span>type.diff</span>
+
+            <div class="buttons">
+                <span class="red"></span>
+            </div>
+        </div>
+
+<pre class="editor"><code>
+<span class="secondary">─────┐</span>
+<span class="secondary">• 1: <span class="secondary">│</span></span>
+<span class="secondary">─────┘</span>
+<span class="secondary"><span class="secondary">│</span></span>  <span class="red-text">1</span> <span class="secondary"><span class="secondary">│</span></span><span class="line highlight"><span class="keyword">void</span> <span class="function">reset_device(<span class="keyword">void</span>)</span>           </span><span class="secondary"><span class="secondary">│</span></span>  <span class="green-text">1</span> <span class="secondary"><span class="secondary">│</span></span><span class="line line-green"><span class="keyword">void</span> <span class="function">reset_device</span>(<span class="keyword">void</span>)<span class="line-dark-green"> {</span></span>
+<span class="secondary">│</span>  <span class="red-text">2</span> <span class="secondary">│</span><span class="line highlight">{                                 </span><span class="secondary">│</span>  <span class="secondary">2</span> <span class="secondary">│</span>
+<span class="secondary">│</span>  <span class="red-text">3</span> <span class="secondary">│</span><span class="line highlight">                                  </span><span class="secondary">│</span>    <span class="secondary">│</span>
+<span class="secondary">│</span>  <span class="red-text">4</span> <span class="secondary">│</span><span class="line highlight">    <span class="comment">/* Reset hardware */</span>          </span><span class="secondary">│</span>    <span class="secondary">│</span>
+<span class="line"><span class="secondary">│</span>  <span class="secondary">5</span> <span class="secondary">│</span>    write_reg(CTRL, <span class="number">0</span>);           <span class="secondary">│</span>  <span class="secondary">3</span> <span class="secondary">│</span>    write_reg(CTRL, <span class="number">0</span>);</span>
+<span class="secondary">│</span>  <span class="red-text">6</span> <span class="secondary">│</span><span class="line highlight">                                  </span><span class="secondary">│</span>    <span class="secondary">│</span>
+<span class="line"><span class="secondary">│</span>  <span class="secondary">7</span> <span class="secondary">│</span>    enable_device();              <span class="secondary">│</span>  <span class="secondary">4</span> <span class="secondary">│</span>    enable_device();</span>
+<span class="line"><span class="secondary">│</span>  <span class="secondary">8</span> <span class="secondary">│</span>}                                 <span class="secondary">│</span>  <span class="secondary">5</span> <span class="secondary">│</span>}</span>
+</code></pre>
+    </div> -->
+
+<!-- <div class="window">
+        <div class="titlebar">
+            <span>type.diff</span>
+
+            <div class="buttons">
+                <span class="red"></span>
+            </div>
+        </div>
+
+<pre class="editor"><code>
+<span class="secondary">─────┐</span>
+<span class="secondary">• 2: │</span>
+<span class="secondary">─────┘</span>
+<span class="secondary">│</span>  <span class="red-text">1</span> <span class="secondary">│</span><span class="line highlight"><span class="keyword">int</span> <span class="function"><span class="dark-highlight">sum_array</span></span>(<span class="keyword">int</span> *<span class="dark-highlight">v</span>, <span class="keyword">int</span> <span class="dark-highlight">s</span>)    </span><span class="secondary">│</span>  1 <span class="secondary">│</span><span class="line line-green"><span class="keyword">int</span> <span class="function"><span class="line-dark-green">sum_vector</span></span>(<span class="keyword">int</span> *<span class="line-dark-green">d</span>, <span class="keyword">int</span> <span class="line-dark-green">l</span>)  </span>
+<span class="secondary">│</span>  2 <span class="secondary">│</span>{                               <span class="secondary">│</span>  2 <span class="secondary">│</span>{
+<span class="secondary">│</span>  <span class="red-text">3</span> <span class="secondary">│</span><span class="line highlight">    <span class="keyword">int</span> <span class="dark-highlight">sum</span> <span class="keyword">=</span> <span class="number">0</span>;                </span><span class="secondary">│</span>  3 <span class="secondary">│</span><span class="line line-green">    <span class="keyword">int</span> <span class="line-dark-green">total</span> <span class="keyword">=</span> <span class="number">0</span>;             </span>
+<span class="secondary">│</span>  4 <span class="secondary">│</span>                                <span class="secondary">│</span>  4 <span class="secondary">│</span>
+<span class="secondary">│</span>  <span class="red-text">5</span> <span class="secondary">│</span><span class="line highlight">    <span class="keyword">for</span> (<span class="keyword">int</span> <span class="dark-highlight">i</span> <span class="keyword">=</span> <span class="number">0</span>; <span class="dark-highlight">i</span> <span class="keyword"><</span> <span class="dark-highlight">s</span>; <span class="dark-highlight">i</span><span class="keyword">++</span>) </span><span class="secondary">│</span>  5 <span class="secondary">│</span><span class="line line-green">    <span class="keyword">for</span> (<span class="keyword">int</span> <span class="line-dark-green">j</span> <span class="keyword">=</span> <span class="number">0</span>; <span class="line-dark-green">j</span> <span class="keyword"><</span> <span class="line-dark-green">l</span>; <span class="line-dark-green">j</span><span class="keyword">++</span>)
+</span><span class="secondary">│</span>  <span class="red-text">6</span> <span class="secondary">│</span><span class="line highlight">        <span class="dark-highlight">sum</span> <span class="keyword">+=</span> <span class="dark-highlight">v</span>[<span class="dark-highlight">i</span>];            </span><span class="secondary">│</span>  6 <span class="secondary">│</span><span class="line line-green">        <span class="line-dark-green">total</span> <span class="keyword">+=</span> <span class="line-dark-green">d</span>[<span class="line-dark-green">j</span>];         </span>
+<span class="secondary">│</span>  7 <span class="secondary">│</span>                                <span class="secondary">│</span>  7 <span class="secondary">│</span>
+<span class="secondary">│</span>  <span class="red-text">8</span> <span class="secondary">│</span><span class="line highlight">    <span class="keyword">return</span> <span class="dark-highlight">sum</span>;                 </span><span class="secondary">│</span>  8 <span class="secondary">│</span><span class="line line-green">    <span class="keyword">return</span> <span class="line-dark-green">total</span>;              </span>
+<span class="secondary">│</span>  9 <span class="secondary">│</span>}                               <span class="secondary">│</span>  9 <span class="secondary">│</span>}
+</code></pre>
+    </div> -->
+
+<!-- <div class="window">
+        <div class="titlebar">
+            <span>type.diff</span>
+
+            <div class="buttons">
+                <span class="red"></span>
+            </div>
+        </div>
+
+<pre class="editor"><code>
+<span class="secondary">─────┐</span>
+<span class="secondary">• 3: │</span>
+<span class="secondary">─────┘</span>
+<span class="secondary">│</span>  <span class="red-text">1</span> <span class="secondary">│</span><span class="line highlight"><span class="keyword">void</span> <span class="dark-highlight"><span class="function">init_v11</span></span>(kgd_dev *<span class="dark-highlight">kgd</span>)     </span><span class="secondary">│</span>  <span class="green-text">1</span> <span class="secondary">│</span><span class="line line-green"><span class="keyword">void</span> <span class="line-dark-green"><span class="function">init_v12</span></span>(kgd_dev *<span class="line-dark-green">adev</span>)   </span>
+<span class="secondary">│  2 │</span>{                               <span class="secondary">│  2 │</span>{
+<span class="secondary">│  3 │</span>    WREG32(mmIH_CNTL, <span class="number">0</span>);       <span class="secondary">│  3 │</span>    WREG32(mmIH_CNTL, <span class="number">0</span>);
+<span class="secondary">│  4 │</span>    WREG32(mmIH_RB_CNTL, <span class="number">1</span>);    <span class="secondary">│  4 │</span>    WREG32(mmIH_RB_CNTL, <span class="number">1</span>);
+<span class="secondary">│</span>    <span class="secondary">│</span>                                <span class="secondary">│</span>  <span class="green-text">5</span> <span class="secondary">│</span><span class="line line-green">                               </span>
+<span class="secondary">│</span>    <span class="secondary">│</span>                                <span class="secondary">│</span>  <span class="green-text">6</span> <span class="secondary">│</span><span class="line line-green">    WREG32(mmIH_SIZE, <span class="number">4096</span>);   </span>
+<span class="secondary">│</span>    <span class="secondary">│</span>                                <span class="secondary">│</span>  <span class="green-text">7</span> <span class="secondary">│</span>
+<span class="secondary">│  5 │</span>    WREG32(mmIH_DOORBELL, <span class="number">0</span>);   <span class="secondary">│  8 │</span>    WREG32(mmIH_DOORBELL, <span class="number">0</span>);
+<span class="secondary">│  6 │</span>                                <span class="secondary">│  9 │</span>
+<span class="secondary">│</span>  <span class="red-text">7</span> <span class="secondary">│</span><span class="line highlight">    enable_interrupts(<span class="dark-highlight">kgd</span>);     </span><span class="secondary">│</span> <span class="green-text">10</span> <span class="secondary">│</span><span class="line line-green">    enable_interrupts(<span class="line-dark-green">adev</span>);   </span>
+<span class="secondary">│  8 │</span>}                               <span class="secondary">│ 11 │</span>}
+</code></pre>
+    </div> -->
+
+<!-- <div class="window">
+        <div class="titlebar">
+            <span>type.diff</span>
+
+            <div class="buttons">
+                <span class="red"></span>
+            </div>
+        </div>
+
+<pre class="editor"><code>
+<span class="secondary">─────┐</span>
+<span class="secondary">• 4: │</span>
+<span class="secondary">─────┘</span>
+<span class="secondary">│  1 │</span><span class="keyword">void</span> <span class="function">init_device</span>(<span class="keyword">void</span>)          <span class="secondary">│  1 │</span><span class="keyword">void</span> <span class="function">init_device</span>(<span class="keyword">void</span>)
+<span class="secondary">│  2 │</span>{                               <span class="secondary">│  2 │</span>{
+<span class="secondary">│    │</span>                                <span class="secondary">│  <span class="green-text">3</span> │</span><span class="line line-green">  <span class="keyword">const int</span> v[] <span class="keyword">=</span> {<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>};   </span>
+<span class="secondary">│    │</span>                                <span class="secondary">│  <span class="green-text">4</span> │</span><span class="line line-green">                               </span>
+<span class="secondary">│    │</span>                                <span class="secondary">│  <span class="green-text">5</span> │</span><span class="line line-green">  <span class="keyword">for</span> (<span class="keyword">int</span> i <span class="keyword">=</span> <span class="number">0</span>; i <span class="keyword"><</span> <span class="number">3</span>; i<span class="keyword">++</span>)  </span>
+<span class="secondary">│  <span class="red-text">3</span> │</span><span class="line highlight">  write_reg(REG_A, <span class="dark-highlight"><span class="number">1</span></span>);          </span><span class="secondary">│  <span class="green-text">6</span> │</span><span class="line line-green">  <span class="line-dark-green">  </span>write_reg(REG_A<span class="line-dark-green"> <span class="keyword">+</span> i</span>, <span class="line-dark-green">v[i]</span>);</span>
+<span class="secondary">│  <span class="red-text">4</span> │</span><span class="line highlight">  write_reg(REG_B, <span class="number">2</span>);          </span><span class="secondary">│    │</span>
+<span class="secondary">│  <span class="red-text">5</span> │</span><span class="line highlight">  write_reg(REG_C, <span class="number">3</span>);          </span><span class="secondary">│    │</span>
+<span class="secondary">│  6 │</span>}                               <span class="secondary">│  7 │</span>}
+
+</code></pre>
+    </div> -->
+
+<!-- <div class="window">
+        <div class="titlebar">
+            <span>bash</span>
+
+            <div class="buttons">
+                <span class="red"></span>
+            </div>
+        </div>
+
+<pre class="editor"><code>
+<span class="keyword">arkanjo</span> benchmark --methods=<span class="string">"1,3,4"</span> --dataset=<span class="string">"bigclonebench"</span> && \
+<span class="keyword">arkanjo</span> benchmark --methods=<span class="string">"1,3,4"</span> --dataset=<span class="string">"poj104"</span>
+</code></pre>
+    </div> -->
+
+<!-- <div class="window">
+        <div class="titlebar">
+            <span>bash</span>
+
+            <div class="buttons">
+                <span class="red"></span>
+            </div>
+        </div>
+
+<pre class="editor"><code>
+<span class="keyword">arkanjo</span> preprocessor build && \
+<span class="keyword">arkanjo</span> explorer
+</code></pre>
+    </div> -->
+
+<div class="window">
+        <div class="titlebar">
+            <span>bash</span>
+
+            <div class="buttons">
+                <span class="red"></span>
+            </div>
+        </div>
+
+<pre class="editor"><code>
+<span class="keyword">arkanjo</span> explorer<span class="string">?</span>
+</code></pre>
+    </div>
+
+    <script>
+// (async () => {
+//     const windowElement = document.querySelector(".window");
+
+//     const canvas = await html2canvas(windowElement, {
+//         backgroundColor: null,
+//         scale: 4
+//     });
+
+//     const link = document.createElement("a");
+//     link.download = "type1.png";
+//     link.href = canvas.toDataURL();
+//     link.click();
+// })()
+    </script>
+</body>
+</html>

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+</head>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1d1d20;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        #container {
+            padding: 6px;
+            height: 100dvh;
+        }
+
+        .node {
+            z-index: 1000;
+            border-radius: 100%;
+            overflow: hidden;
+            position: absolute;
+            img {
+                width: 100%;
+                height: 100%;
+            }
+        }
+
+        #title {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-family: 'Symbola';
+            z-index: 1;
+            font-size: 72px;
+            margin: 0;
+            transition: 1s ease;
+        }
+    </style>
+<body>
+    <div id="container"></div>
+    <h1 id="title">Linux v7.2</h1>
+<script>
+class Ball {
+    constructor(element, size, x, y) {
+        this.element = element
+        this.size = size
+
+        this.x = x
+        this.y = y
+        this.velocityY = (Math.random() - 0.5) * 8;
+        this.velocityX = 0.0
+        this.elastic = 0.5
+        this.mass = size / 2
+
+        this.delay = Math.random() * 50000;
+    }
+
+    get centerX() { return this.x + this.size / 2; }
+    get centerY() { return this.y + this.size / 2; }
+
+    update(checkBottom) {
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+
+        this.velocityX *= 0.99;
+        this.velocityY *= 0.99;
+
+        this.velocityY += 0.1 // m/s^2
+
+        if (checkBottom) {
+            if (this.y + this.size > window.innerHeight) {
+                this.y = window.innerHeight - this.size
+                this.velocityY *= -this.elastic
+            }
+        }
+
+        // if (this.y < 0) {
+        //     this.y = 0;
+        //     this.velocityY *= -this.elastic
+        // }
+        if (this.x + this.size > window.innerWidth) {
+            this.x = window.innerWidth - this.size;
+            this.velocityX *= -this.elastic;
+        }
+        if (this.x < 0) {
+            this.x = 0;
+            this.velocityX *= -this.elastic;
+        }
+    }
+
+    draw() {
+        this.element.style.top = `${this.y}px`
+        this.element.style.left = `${this.x}px`
+    }
+}
+
+function rotate(vx, vy, angle) {
+    return {
+        x: vx * Math.cos(angle) - vy * Math.sin(angle),
+        y: vx * Math.sin(angle) + vy * Math.cos(angle)
+    };
+}
+
+function resolveCollision(b1, b2) {
+    const xVelocityDiff = b1.velocityX - b2.velocityX;
+    const yVelocityDiff = b1.velocityY - b2.velocityY;
+
+    const xDist = b2.centerX - b1.centerX;
+    const yDist = b2.centerY - b1.centerY;
+
+    if (xVelocityDiff * xDist + yVelocityDiff * yDist >= 0) {
+        const angle = -Math.atan2(yDist, xDist);
+
+        const m1 = b1.mass;
+        const m2 = b2.mass;
+
+
+        const u1 = rotate(b1.velocityX, b1.velocityY, angle);
+        const u2 = rotate(b2.velocityX, b2.velocityY, angle);
+
+        const restitution = 0.6;
+
+        const massSum = b1.mass + b2.mass;
+        const v1x = (u1.x * (b1.mass - b2.mass) + 2 * b2.mass * u2.x) / massSum * restitution;
+        const v2x = (u2.x * (b2.mass - b1.mass) + 2 * b1.mass * u1.x) / massSum * restitution;
+
+        const vFinal1 = rotate(v1x, u1.y, -angle);
+        const vFinal2 = rotate(v2x, u2.y, -angle);
+
+        b1.velocityX = vFinal1.x;
+        b1.velocityY = vFinal1.y;
+        b2.velocityX = vFinal2.x;
+        b2.velocityY = vFinal2.y;
+    }
+}
+
+async function getAuthor() {
+    const url = "authors.txt";
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Response status: ${response.status}`);
+        }
+
+        const result = await response.text();
+        const lines = result.split("\n")
+        return lines.map(line => {
+            const values = line.split(" ")
+            return {
+                "commits": values[0],
+                "email": values[1],
+                "hash": values[2]
+            }
+        })
+    } catch (error) {
+        console.error(error.message);
+    }
+}
+
+function createBall(author, callback) {
+    const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
+
+    const mapRangePower = (value, min, max, newMin, newMax, exponent = 0.5) => {
+        const clampedValue = clamp(value, min, max);
+
+        const normalized = (clampedValue - min) / (max - min);
+
+        const powerNormalized = Math.pow(normalized, exponent);
+
+        return newMin + powerNormalized * (newMax - newMin);
+    };
+
+    const size = mapRangePower(author.commits, 0, 42735, 64, 256 * 3/2)
+
+    const x = Math.random() * window.innerWidth
+    const y = -((4 * Math.random() * window.innerHeight) + size)
+    const node = document.createElement("div");
+    node.style.top = `${x}px`
+    node.style.left = `${y}px`
+    node.id = author.email
+    node.className = "node"
+
+    node.style.width = `${size}px`
+    node.style.height = `${size}px`
+
+    const image = document.createElement("img")
+    image.src = `avatars/${author.email}.png`;
+
+    container.appendChild(node);
+    node.appendChild(image);
+
+    image.onload = function() {
+        callback(new Ball(node, size, x, y));
+    };
+}
+
+const attemptyCreateBall = (ballsCollied, balls, ball) => {
+    if (balls.length < 1) {
+        balls.push(ball)
+    }
+
+    let collided = false
+    for (let j = 0; j < balls.length; j++) {
+        const dx = ball.centerX - balls[j].centerX;
+        const dy = ball.centerY - balls[j].centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < (ball.size / 2) + (balls[j].size / 2)) {
+            collided = true
+        }
+    }
+    if (!collided) {
+        balls.push(ball)
+    } else {
+        ballsCollied.push(ball)
+    }
+}
+
+async function main() {
+    const authors = await getAuthor()
+    const balls = []
+    const ballsCollied = []
+
+    let counter = 0;
+    let amount = 25
+    const intervalId = setInterval(() => {
+        let start = 0
+        for (let i = counter; i < counter + amount; i++) {
+            createBall(authors[i], ball => {
+                attemptyCreateBall(ballsCollied, balls, ball)
+            })
+        }
+        counter += amount;
+
+        if (counter >= 250) {
+            clearInterval(intervalId);
+        }
+    }, 500);
+
+    let start;
+    let checkBottom = true
+    function step(timestamp) {
+        if (start === undefined) {
+            start = timestamp;
+        }
+        const elapsed = timestamp - start;
+
+        balls.forEach(ball => {
+            ball.update(checkBottom)
+            ball.draw()
+
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    const dx = balls[i].centerX - balls[j].centerX;
+                    const dy = balls[i].centerY - balls[j].centerY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < (balls[i].size / 2) + (balls[j].size / 2)) {
+                        resolveCollision(balls[i], balls[j]);
+                    }
+                }
+            }
+        })
+
+        if (timestamp > 1000 * 20) {
+            document.getElementById("title").style.opacity = 0
+        }
+
+        if (timestamp > 1000 * 25) {
+            checkBottom = false
+        }
+
+        requestAnimationFrame(step);
+    }
+
+    setTimeout(() => {
+        requestAnimationFrame(step);
+    }, 500)
+}
+setTimeout(async () => {
+    await main()
+}, 5000)
+
+</script>
+</body>
+</html>
