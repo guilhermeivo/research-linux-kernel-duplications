@@ -1,0 +1,28 @@
+Related Projects and Research Materials
+=======================================
+
+This document provides links to repositories and external resources associated
+with the research project.
+
+Research Software
+-----------------
+
+- ArKanjo: Tool used for detecting and analyzing code duplication in the Linux kernel.
+    https://github.com/arkanjo-tool/arkanjo (MIRROR)
+    https://gitlab.com/ccsl-usp/codev/arkanjo-tool
+
+- Linux Kernel Similarity
+    https://github.com/guilhermeivo/linux-kernel-similarity
+
+- Duplication Visualization
+    https://github.com/guilhermeivo/duplication-viz
+
+Research Publications and Presentations
+---------------------------------------
+
+- SIICUSP Poster: Poster presented at the International Symposium on Undergraduate Research at USP.
+    https://www.linux.ime.usp.br/~guilhermeivo/SIICUSP2026-Poster.pdf
+    https://gitlab.com/ccsl-usp/codev/arkanjo-texts/-/merge_requests/4
+
+- SIICUSP Final Abstract: Final abstract submitted to the symposium.
+    https://www.linux.ime.usp.br/~guilhermeivo/SIICUSP2026-Abstract.pdf
