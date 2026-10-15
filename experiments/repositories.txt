@@ -1,0 +1,35 @@
+# repositorios muito grandes para testar na minha maquina
+# https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+# https://github.com/mozilla-firefox/firefox.git
+
+# divido o processamento em partes
+#
+# .cc, .h
+#
+# .java, .kt
+#
+# .js, .ts
+# https://github.com/chromium/chromium.git
+
+# muitas linguagens 
+# https://gcc.gnu.org/git/gcc.git
+
+# c
+#https://github.com/apache/httpd.git
+
+# c, shell (analisar com mais calma estrutura do tree-sitter)
+#https://git.kernel.org/pub/scm/git/git.git
+
+# c
+https://github.com/nginx/nginx.git
+
+# c
+https://gitlab.gnome.org/GNOME/gimp.git
+
+# python, c
+#https://github.com/python/cpython.git
+
+# escrito em Emacs Lisp, analisar com mais calma linguagens funcionais
+# https://https.git.savannah.gnu.org/git/emacs.git
+
+#https://github.com/llvm/llvm-project.git

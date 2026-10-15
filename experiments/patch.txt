@@ -1,0 +1,14 @@
+linux/drivers/gpu/drm/amd/display/dc/gpio
+
+0.9
+1)
+
+./bin/arkanjo ex -l 5 -c T
+
+https://lore.kernel.org/lkml/CAJgF-xs=3fbKQO5Mj=coPMXq0ecWmV0bJDNFN44coEHV3WS=wg@mail.gmail.com/T/#u
+
+
+commit 0f2acd3148e0ef42bdacbd477f90e8533f96b2ac (origin/master, origin/HEAD, master)
+
+origin	https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git (fetch)
+origin	https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git (push)
