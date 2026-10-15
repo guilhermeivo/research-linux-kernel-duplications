@@ -1,0 +1,178 @@
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH] iio: adc: ad4170: use lookup table for gpio mask selection
+
+Both ad4170_gpio_direction_input() and
+ad4170_gpio_direction_output() duplicate the same switch
+statement to map a GPIO offset to its corresponding mask.
+
+Replace the switch with a static lookup table, simplifying the code
+and avoiding duplication. This also makes future extensions easier.
+
+No functional change intended.
+
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/ad4170-4.c | 47 ++++++++++++--------------------------
+ 1 file changed, 15 insertions(+), 32 deletions(-)
+
+diff --git a/drivers/iio/adc/ad4170-4.c b/drivers/iio/adc/ad4170-4.c
+index 82205bfae531..d1e971649b6f 100644
+--- a/drivers/iio/adc/ad4170-4.c
++++ b/drivers/iio/adc/ad4170-4.c
+@@ -1699,34 +1699,29 @@ static int ad4170_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
+ 	return ret;
+ }
+ 
++static const unsigned long gpio_masks[] = {
++	AD4170_GPIO_MODE_GPIO0_MSK,
++	AD4170_GPIO_MODE_GPIO1_MSK,
++	AD4170_GPIO_MODE_GPIO2_MSK,
++	AD4170_GPIO_MODE_GPIO3_MSK,
++};
++
+ static int ad4170_gpio_direction_input(struct gpio_chip *gc, unsigned int offset)
+ {
+ 	struct iio_dev *indio_dev = gpiochip_get_data(gc);
+ 	struct ad4170_state *st = iio_priv(indio_dev);
+-	unsigned long gpio_mask;
+ 	int ret;
+ 
+ 	if (!iio_device_claim_direct(indio_dev))
+ 		return -EBUSY;
+ 
+-	switch (offset) {
+-	case 0:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO0_MSK;
+-		break;
+-	case 1:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO1_MSK;
+-		break;
+-	case 2:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO2_MSK;
+-		break;
+-	case 3:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO3_MSK;
+-		break;
+-	default:
++	if (offset >= ARRAY_SIZE(gpio_masks)) {
+ 		ret = -EINVAL;
+ 		goto err_release;
+ 	}
+-	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG, gpio_mask,
++
++	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG,
++				 gpio_masks[offset],
+ 				 AD4170_GPIO_MODE_GPIO_INPUT << (2 * offset));
+ 
+ err_release:
+@@ -1740,7 +1735,6 @@ static int ad4170_gpio_direction_output(struct gpio_chip *gc,
+ {
+ 	struct iio_dev *indio_dev = gpiochip_get_data(gc);
+ 	struct ad4170_state *st = iio_priv(indio_dev);
+-	unsigned long gpio_mask;
+ 	int ret;
+ 
+ 	ret = ad4170_gpio_set(gc, offset, value);
+@@ -1750,24 +1744,13 @@ static int ad4170_gpio_direction_output(struct gpio_chip *gc,
+ 	if (!iio_device_claim_direct(indio_dev))
+ 		return -EBUSY;
+ 
+-	switch (offset) {
+-	case 0:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO0_MSK;
+-		break;
+-	case 1:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO1_MSK;
+-		break;
+-	case 2:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO2_MSK;
+-		break;
+-	case 3:
+-		gpio_mask = AD4170_GPIO_MODE_GPIO3_MSK;
+-		break;
+-	default:
++	if (offset >= ARRAY_SIZE(gpio_masks)) {
+ 		ret = -EINVAL;
+ 		goto err_release;
+ 	}
+-	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG, gpio_mask,
++
++	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG,
++				 gpio_masks[offset],
+ 				 AD4170_GPIO_MODE_GPIO_OUTPUT << (2 * offset));
+ 
+ err_release:
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH] iio: adc: ad4170: use lookup table for gpio mask
+
+On Sun, Apr 05, 2026 at 06:37:26PM -0300, Guilherme Ivo Bozi wrote:
+> Both ad4170_gpio_direction_input() and
+> ad4170_gpio_direction_output() duplicate the same switch
+> statement to map a GPIO offset to its corresponding mask.
+> 
+> Replace the switch with a static lookup table, simplifying the code
+> and avoiding duplication. This also makes future extensions easier.
+> 
+> No functional change intended.
+
+If this churn is okay by maintainers,
+Reviewed-by: #### <####>
+
+-- 
+With Best Regards,
+Andy Shevchenko
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH] iio: adc: ad4170: use lookup table for gpio mask
+
+On 04/05, Guilherme Ivo Bozi wrote:
+> Both ad4170_gpio_direction_input() and
+> ad4170_gpio_direction_output() duplicate the same switch
+> statement to map a GPIO offset to its corresponding mask.
+> 
+> Replace the switch with a static lookup table, simplifying the code
+> and avoiding duplication. This also makes future extensions easier.
+> 
+> No functional change intended.
+> 
+> Signed-off-by: #### <####>
+
+Acked-by: #### <####>
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH] iio: adc: ad4170: use lookup table for gpio mask
+
+On Mon, 6 Apr 2026 22:50:53 +0300
+#### <####> wrote:
+
+> On Sun, Apr 05, 2026 at 06:37:26PM -0300, Guilherme Ivo Bozi wrote:
+> > Both ad4170_gpio_direction_input() and
+> > ad4170_gpio_direction_output() duplicate the same switch
+> > statement to map a GPIO offset to its corresponding mask.
+> > 
+> > Replace the switch with a static lookup table, simplifying the code
+> > and avoiding duplication. This also makes future extensions easier.
+> > 
+> > No functional change intended.  
+> 
+> If this churn is okay by maintainers,
+> Reviewed-by: #### <####>
+> 
+Applied.
+
+Thanks,
+
+J
+
+
+

@@ -1,0 +1,1087 @@
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v3] drm/amd/display: Deduplicate DCN DDC register assignment
+
+Several DCN generations implement identical define_ddc_registers()
+functions to assign DDC register, shift and mask pointers based on
+GPIO ID.
+
+Introduce a shared inline helper,
+dcn_define_ddc_registers_common(), and convert all DCN
+implementations to use it.
+
+This reduces duplication and improves maintainability without
+changing behavior.
+
+No functional changes intended.
+
+Signed-off-by: #### <####>
+---
+
+v2:
+	- Corrected type mismatch (ddc_shift - ddc_sh_mask)
+
+v3:
+	- Fix threading (previous version was not sent as reply)
+	- Squashed fix to avoid build breakage
+
+ .../display/dc/gpio/dcn20/hw_factory_dcn20.c  | 27 ++++---------
+ .../display/dc/gpio/dcn21/hw_factory_dcn21.c  | 27 ++++---------
+ .../display/dc/gpio/dcn30/hw_factory_dcn30.c  | 27 ++++---------
+ .../dc/gpio/dcn315/hw_factory_dcn315.c        | 27 ++++---------
+ .../display/dc/gpio/dcn32/hw_factory_dcn32.c  | 27 ++++---------
+ .../dc/gpio/dcn401/hw_factory_dcn401.c        | 26 ++++---------
+ .../amd/display/dc/gpio/hw_factory_dcn_ddc.h  | 39 +++++++++++++++++++
+ 7 files changed, 86 insertions(+), 114 deletions(-)
+ create mode 100644 drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+index e0bd0c722e00..905d14079b91 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+ 
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn20.h"
+ 
+ 
+@@ -182,25 +184,12 @@ static void define_ddc_registers(
+ 		struct hw_gpio_pin *pin,
+ 		uint32_t en)
+ {
+-	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-	switch (pin->id) {
+-	case GPIO_ID_DDC_DATA:
+-		ddc->regs = &ddc_data_regs_dcn[en];
+-		ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-		break;
+-	case GPIO_ID_DDC_CLOCK:
+-		ddc->regs = &ddc_clk_regs_dcn[en];
+-		ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-		break;
+-	default:
+-		ASSERT_CRITICAL(false);
+-		return;
+-	}
+-
+-	ddc->shifts = &ddc_shift[en];
+-	ddc->masks = &ddc_mask[en];
+-
++	dcn_define_ddc_registers_common(
++		pin, en,
++		ddc_data_regs_dcn,
++		ddc_clk_regs_dcn,
++		ddc_shift,
++		ddc_mask);
+ }
+ 
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+index 2f57ee6deabc..f347b8c7e2b6 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+ 
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn21.h"
+ 
+ #include "dcn/dcn_2_1_0_offset.h"
+@@ -170,25 +172,12 @@ static void define_ddc_registers(
+ 		struct hw_gpio_pin *pin,
+ 		uint32_t en)
+ {
+-	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-	switch (pin->id) {
+-	case GPIO_ID_DDC_DATA:
+-		ddc->regs = &ddc_data_regs_dcn[en];
+-		ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-		break;
+-	case GPIO_ID_DDC_CLOCK:
+-		ddc->regs = &ddc_clk_regs_dcn[en];
+-		ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-		break;
+-	default:
+-		ASSERT_CRITICAL(false);
+-		return;
+-	}
+-
+-	ddc->shifts = &ddc_shift[en];
+-	ddc->masks = &ddc_mask[en];
+-
++	dcn_define_ddc_registers_common(
++		pin, en,
++		ddc_data_regs_dcn,
++		ddc_clk_regs_dcn,
++		ddc_shift,
++		ddc_mask);
+ }
+ 
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+index 36a5736c58c9..25eef1ee10fe 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+ 
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn30.h"
+ 
+ 
+@@ -199,25 +201,12 @@ static void define_ddc_registers(
+ 		struct hw_gpio_pin *pin,
+ 		uint32_t en)
+ {
+-	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-	switch (pin->id) {
+-	case GPIO_ID_DDC_DATA:
+-		ddc->regs = &ddc_data_regs_dcn[en];
+-		ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-		break;
+-	case GPIO_ID_DDC_CLOCK:
+-		ddc->regs = &ddc_clk_regs_dcn[en];
+-		ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-		break;
+-	default:
+-		ASSERT_CRITICAL(false);
+-		return;
+-	}
+-
+-	ddc->shifts = &ddc_shift[en];
+-	ddc->masks = &ddc_mask[en];
+-
++	dcn_define_ddc_registers_common(
++		pin, en,
++		ddc_data_regs_dcn,
++		ddc_clk_regs_dcn,
++		ddc_shift,
++		ddc_mask);
+ }
+ 
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+index 5feebb3b95ca..571a6f1b0cf9 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+ 
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn315.h"
+ 
+ #include "dcn/dcn_3_1_5_offset.h"
+@@ -191,25 +193,12 @@ static void define_ddc_registers(
+ 		struct hw_gpio_pin *pin,
+ 		uint32_t en)
+ {
+-	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-	switch (pin->id) {
+-	case GPIO_ID_DDC_DATA:
+-		ddc->regs = &ddc_data_regs_dcn[en];
+-		ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-		break;
+-	case GPIO_ID_DDC_CLOCK:
+-		ddc->regs = &ddc_clk_regs_dcn[en];
+-		ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-		break;
+-	default:
+-		ASSERT_CRITICAL(false);
+-		return;
+-	}
+-
+-	ddc->shifts = &ddc_shift[en];
+-	ddc->masks = &ddc_mask[en];
+-
++	dcn_define_ddc_registers_common(
++		pin, en,
++		ddc_data_regs_dcn,
++		ddc_clk_regs_dcn,
++		ddc_shift,
++		ddc_mask);
+ }
+ 
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+index 985f10b39750..d6e97b246bae 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+ 
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn32.h"
+ 
+ #include "dcn/dcn_3_2_0_offset.h"
+@@ -203,25 +205,12 @@ static void define_ddc_registers(
+ 		struct hw_gpio_pin *pin,
+ 		uint32_t en)
+ {
+-	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-	switch (pin->id) {
+-	case GPIO_ID_DDC_DATA:
+-		ddc->regs = &ddc_data_regs_dcn[en];
+-		ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-		break;
+-	case GPIO_ID_DDC_CLOCK:
+-		ddc->regs = &ddc_clk_regs_dcn[en];
+-		ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-		break;
+-	default:
+-		ASSERT_CRITICAL(false);
+-		return;
+-	}
+-
+-	ddc->shifts = &ddc_shift[en];
+-	ddc->masks = &ddc_mask[en];
+-
++	dcn_define_ddc_registers_common(
++		pin, en,
++		ddc_data_regs_dcn,
++		ddc_clk_regs_dcn,
++		ddc_shift,
++		ddc_mask);
+ }
+ 
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+index 928abca18a18..06a4d7a8a1ac 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+@@ -12,6 +12,7 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+ 
++#include "../hw_factory_dcn_ddc.h"
+ 
+ #include "dcn/dcn_4_1_0_offset.h"
+ #include "dcn/dcn_4_1_0_sh_mask.h"
+@@ -195,25 +196,12 @@ static void define_ddc_registers(
+ 		struct hw_gpio_pin *pin,
+ 		uint32_t en)
+ {
+-	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-	switch (pin->id) {
+-	case GPIO_ID_DDC_DATA:
+-		ddc->regs = &ddc_data_regs_dcn[en];
+-		ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-		break;
+-	case GPIO_ID_DDC_CLOCK:
+-		ddc->regs = &ddc_clk_regs_dcn[en];
+-		ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-		break;
+-	default:
+-		ASSERT_CRITICAL(false);
+-		return;
+-	}
+-
+-	ddc->shifts = &ddc_shift[en];
+-	ddc->masks = &ddc_mask[en];
+-
++	dcn_define_ddc_registers_common(
++		pin, en,
++		ddc_data_regs_dcn,
++		ddc_clk_regs_dcn,
++		ddc_shift,
++		ddc_mask);
+ }
+ 
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h b/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+new file mode 100644
+index 000000000000..863177cf67e8
+--- /dev/null
++++ b/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+@@ -0,0 +1,39 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright 2024 Advanced Micro Devices, Inc.
++ */
++
++#ifndef __DAL_HW_FACTORY_DCN_DDC_H__
++#define __DAL_HW_FACTORY_DCN_DDC_H__
++
++static inline void dcn_define_ddc_registers_common(
++		struct hw_gpio_pin *pin,
++		uint32_t en,
++		const struct ddc_registers *data_regs,
++		const struct ddc_registers *clk_regs,
++		const struct ddc_sh_mask *shift,
++		const struct ddc_sh_mask *mask)
++{
++	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
++
++	switch (pin->id) {
++	case GPIO_ID_DDC_DATA:
++		ddc->regs = &data_regs[en];
++		ddc->base.regs = &data_regs[en].gpio;
++		break;
++
++	case GPIO_ID_DDC_CLOCK:
++		ddc->regs = &clk_regs[en];
++		ddc->base.regs = &clk_regs[en].gpio;
++		break;
++
++	default:
++		ASSERT_CRITICAL(false);
++		return;
++	}
++
++	ddc->shifts = &shift[en];
++	ddc->masks = &mask[en];
++}
++
++#endif /* __DAL_HW_FACTORY_DCN_DDC_H__ */
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v3] drm/amd/display: Deduplicate DCN DDC register assignment
+
+Hi,
+
+Just a gentle ping on this.
+Any feedback on v3 would be appreciated.
+
+Thanks.
+
+
+On Mon, Mar 30, 2026 at 10:52=E2=80=#### <####> wrote:
+>
+> Several DCN generations implement identical define_ddc_registers()
+> functions to assign DDC register, shift and mask pointers based on
+> GPIO ID.
+>
+> Introduce a shared inline helper,
+> dcn_define_ddc_registers_common(), and convert all DCN
+> implementations to use it.
+>
+> This reduces duplication and improves maintainability without
+> changing behavior.
+>
+> No functional changes intended.
+>
+> Signed-off-by: #### <####>
+> ---
+>
+> v2:
+>         - Corrected type mismatch (ddc_shift - ddc_sh_mask)
+>
+> v3:
+>         - Fix threading (previous version was not sent as reply)
+>         - Squashed fix to avoid build breakage
+>
+>  .../display/dc/gpio/dcn20/hw_factory_dcn20.c  | 27 ++++---------
+>  .../display/dc/gpio/dcn21/hw_factory_dcn21.c  | 27 ++++---------
+>  .../display/dc/gpio/dcn30/hw_factory_dcn30.c  | 27 ++++---------
+>  .../dc/gpio/dcn315/hw_factory_dcn315.c        | 27 ++++---------
+>  .../display/dc/gpio/dcn32/hw_factory_dcn32.c  | 27 ++++---------
+>  .../dc/gpio/dcn401/hw_factory_dcn401.c        | 26 ++++---------
+>  .../amd/display/dc/gpio/hw_factory_dcn_ddc.h  | 39 +++++++++++++++++++
+>  7 files changed, 86 insertions(+), 114 deletions(-)
+>  create mode 100644 drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_dd=
+c.h
+>
+> diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c=
+ b/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+> index e0bd0c722e00..905d14079b91 100644
+> --- a/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+> +++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+> @@ -32,6 +32,8 @@
+>  #include "../hw_hpd.h"
+>  #include "../hw_generic.h"
+>
+> +#include "../hw_factory_dcn_ddc.h"
+> +
+>  #include "hw_factory_dcn20.h"
+>
+>
+> @@ -182,25 +184,12 @@ static void define_ddc_registers(
+>                 struct hw_gpio_pin *pin,
+>                 uint32_t en)
+>  {
+> -       struct hw_ddc *ddc =3D HW_DDC_FROM_BASE(pin);
+> -
+> -       switch (pin->id) {
+> -       case GPIO_ID_DDC_DATA:
+> -               ddc->regs =3D &ddc_data_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_data_regs_dcn[en].gpio;
+> -               break;
+> -       case GPIO_ID_DDC_CLOCK:
+> -               ddc->regs =3D &ddc_clk_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_clk_regs_dcn[en].gpio;
+> -               break;
+> -       default:
+> -               ASSERT_CRITICAL(false);
+> -               return;
+> -       }
+> -
+> -       ddc->shifts =3D &ddc_shift[en];
+> -       ddc->masks =3D &ddc_mask[en];
+> -
+> +       dcn_define_ddc_registers_common(
+> +               pin, en,
+> +               ddc_data_regs_dcn,
+> +               ddc_clk_regs_dcn,
+> +               ddc_shift,
+> +               ddc_mask);
+>  }
+>
+>  static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+> diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c=
+ b/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+> index 2f57ee6deabc..f347b8c7e2b6 100644
+> --- a/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+> +++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+> @@ -32,6 +32,8 @@
+>  #include "../hw_hpd.h"
+>  #include "../hw_generic.h"
+>
+> +#include "../hw_factory_dcn_ddc.h"
+> +
+>  #include "hw_factory_dcn21.h"
+>
+>  #include "dcn/dcn_2_1_0_offset.h"
+> @@ -170,25 +172,12 @@ static void define_ddc_registers(
+>                 struct hw_gpio_pin *pin,
+>                 uint32_t en)
+>  {
+> -       struct hw_ddc *ddc =3D HW_DDC_FROM_BASE(pin);
+> -
+> -       switch (pin->id) {
+> -       case GPIO_ID_DDC_DATA:
+> -               ddc->regs =3D &ddc_data_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_data_regs_dcn[en].gpio;
+> -               break;
+> -       case GPIO_ID_DDC_CLOCK:
+> -               ddc->regs =3D &ddc_clk_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_clk_regs_dcn[en].gpio;
+> -               break;
+> -       default:
+> -               ASSERT_CRITICAL(false);
+> -               return;
+> -       }
+> -
+> -       ddc->shifts =3D &ddc_shift[en];
+> -       ddc->masks =3D &ddc_mask[en];
+> -
+> +       dcn_define_ddc_registers_common(
+> +               pin, en,
+> +               ddc_data_regs_dcn,
+> +               ddc_clk_regs_dcn,
+> +               ddc_shift,
+> +               ddc_mask);
+>  }
+>
+>  static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+> diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c=
+ b/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+> index 36a5736c58c9..25eef1ee10fe 100644
+> --- a/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+> +++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+> @@ -32,6 +32,8 @@
+>  #include "../hw_hpd.h"
+>  #include "../hw_generic.h"
+>
+> +#include "../hw_factory_dcn_ddc.h"
+> +
+>  #include "hw_factory_dcn30.h"
+>
+>
+> @@ -199,25 +201,12 @@ static void define_ddc_registers(
+>                 struct hw_gpio_pin *pin,
+>                 uint32_t en)
+>  {
+> -       struct hw_ddc *ddc =3D HW_DDC_FROM_BASE(pin);
+> -
+> -       switch (pin->id) {
+> -       case GPIO_ID_DDC_DATA:
+> -               ddc->regs =3D &ddc_data_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_data_regs_dcn[en].gpio;
+> -               break;
+> -       case GPIO_ID_DDC_CLOCK:
+> -               ddc->regs =3D &ddc_clk_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_clk_regs_dcn[en].gpio;
+> -               break;
+> -       default:
+> -               ASSERT_CRITICAL(false);
+> -               return;
+> -       }
+> -
+> -       ddc->shifts =3D &ddc_shift[en];
+> -       ddc->masks =3D &ddc_mask[en];
+> -
+> +       dcn_define_ddc_registers_common(
+> +               pin, en,
+> +               ddc_data_regs_dcn,
+> +               ddc_clk_regs_dcn,
+> +               ddc_shift,
+> +               ddc_mask);
+>  }
+>
+>  static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+> diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315=
+.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+> index 5feebb3b95ca..571a6f1b0cf9 100644
+> --- a/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+> +++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+> @@ -32,6 +32,8 @@
+>  #include "../hw_hpd.h"
+>  #include "../hw_generic.h"
+>
+> +#include "../hw_factory_dcn_ddc.h"
+> +
+>  #include "hw_factory_dcn315.h"
+>
+>  #include "dcn/dcn_3_1_5_offset.h"
+> @@ -191,25 +193,12 @@ static void define_ddc_registers(
+>                 struct hw_gpio_pin *pin,
+>                 uint32_t en)
+>  {
+> -       struct hw_ddc *ddc =3D HW_DDC_FROM_BASE(pin);
+> -
+> -       switch (pin->id) {
+> -       case GPIO_ID_DDC_DATA:
+> -               ddc->regs =3D &ddc_data_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_data_regs_dcn[en].gpio;
+> -               break;
+> -       case GPIO_ID_DDC_CLOCK:
+> -               ddc->regs =3D &ddc_clk_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_clk_regs_dcn[en].gpio;
+> -               break;
+> -       default:
+> -               ASSERT_CRITICAL(false);
+> -               return;
+> -       }
+> -
+> -       ddc->shifts =3D &ddc_shift[en];
+> -       ddc->masks =3D &ddc_mask[en];
+> -
+> +       dcn_define_ddc_registers_common(
+> +               pin, en,
+> +               ddc_data_regs_dcn,
+> +               ddc_clk_regs_dcn,
+> +               ddc_shift,
+> +               ddc_mask);
+>  }
+>
+>  static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+> diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c=
+ b/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+> index 985f10b39750..d6e97b246bae 100644
+> --- a/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+> +++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+> @@ -32,6 +32,8 @@
+>  #include "../hw_hpd.h"
+>  #include "../hw_generic.h"
+>
+> +#include "../hw_factory_dcn_ddc.h"
+> +
+>  #include "hw_factory_dcn32.h"
+>
+>  #include "dcn/dcn_3_2_0_offset.h"
+> @@ -203,25 +205,12 @@ static void define_ddc_registers(
+>                 struct hw_gpio_pin *pin,
+>                 uint32_t en)
+>  {
+> -       struct hw_ddc *ddc =3D HW_DDC_FROM_BASE(pin);
+> -
+> -       switch (pin->id) {
+> -       case GPIO_ID_DDC_DATA:
+> -               ddc->regs =3D &ddc_data_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_data_regs_dcn[en].gpio;
+> -               break;
+> -       case GPIO_ID_DDC_CLOCK:
+> -               ddc->regs =3D &ddc_clk_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_clk_regs_dcn[en].gpio;
+> -               break;
+> -       default:
+> -               ASSERT_CRITICAL(false);
+> -               return;
+> -       }
+> -
+> -       ddc->shifts =3D &ddc_shift[en];
+> -       ddc->masks =3D &ddc_mask[en];
+> -
+> +       dcn_define_ddc_registers_common(
+> +               pin, en,
+> +               ddc_data_regs_dcn,
+> +               ddc_clk_regs_dcn,
+> +               ddc_shift,
+> +               ddc_mask);
+>  }
+>
+>  static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+> diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401=
+.c b/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+> index 928abca18a18..06a4d7a8a1ac 100644
+> --- a/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+> +++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+> @@ -12,6 +12,7 @@
+>  #include "../hw_hpd.h"
+>  #include "../hw_generic.h"
+>
+> +#include "../hw_factory_dcn_ddc.h"
+>
+>  #include "dcn/dcn_4_1_0_offset.h"
+>  #include "dcn/dcn_4_1_0_sh_mask.h"
+> @@ -195,25 +196,12 @@ static void define_ddc_registers(
+>                 struct hw_gpio_pin *pin,
+>                 uint32_t en)
+>  {
+> -       struct hw_ddc *ddc =3D HW_DDC_FROM_BASE(pin);
+> -
+> -       switch (pin->id) {
+> -       case GPIO_ID_DDC_DATA:
+> -               ddc->regs =3D &ddc_data_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_data_regs_dcn[en].gpio;
+> -               break;
+> -       case GPIO_ID_DDC_CLOCK:
+> -               ddc->regs =3D &ddc_clk_regs_dcn[en];
+> -               ddc->base.regs =3D &ddc_clk_regs_dcn[en].gpio;
+> -               break;
+> -       default:
+> -               ASSERT_CRITICAL(false);
+> -               return;
+> -       }
+> -
+> -       ddc->shifts =3D &ddc_shift[en];
+> -       ddc->masks =3D &ddc_mask[en];
+> -
+> +       dcn_define_ddc_registers_common(
+> +               pin, en,
+> +               ddc_data_regs_dcn,
+> +               ddc_clk_regs_dcn,
+> +               ddc_shift,
+> +               ddc_mask);
+>  }
+>
+>  static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+> diff --git a/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h b/d=
+rivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+> new file mode 100644
+> index 000000000000..863177cf67e8
+> --- /dev/null
+> +++ b/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+> @@ -0,0 +1,39 @@
+> +/* SPDX-License-Identifier: MIT */
+> +/*
+> + * Copyright 2024 Advanced Micro Devices, Inc.
+> + */
+> +
+> +#ifndef __DAL_HW_FACTORY_DCN_DDC_H__
+> +#define __DAL_HW_FACTORY_DCN_DDC_H__
+> +
+> +static inline void dcn_define_ddc_registers_common(
+> +               struct hw_gpio_pin *pin,
+> +               uint32_t en,
+> +               const struct ddc_registers *data_regs,
+> +               const struct ddc_registers *clk_regs,
+> +               const struct ddc_sh_mask *shift,
+> +               const struct ddc_sh_mask *mask)
+> +{
+> +       struct hw_ddc *ddc =3D HW_DDC_FROM_BASE(pin);
+> +
+> +       switch (pin->id) {
+> +       case GPIO_ID_DDC_DATA:
+> +               ddc->regs =3D &data_regs[en];
+> +               ddc->base.regs =3D &data_regs[en].gpio;
+> +               break;
+> +
+> +       case GPIO_ID_DDC_CLOCK:
+> +               ddc->regs =3D &clk_regs[en];
+> +               ddc->base.regs =3D &clk_regs[en].gpio;
+> +               break;
+> +
+> +       default:
+> +               ASSERT_CRITICAL(false);
+> +               return;
+> +       }
+> +
+> +       ddc->shifts =3D &shift[en];
+> +       ddc->masks =3D &mask[en];
+> +}
+> +
+> +#endif /* __DAL_HW_FACTORY_DCN_DDC_H__ */
+> --
+> 2.47.3
+>
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH] drm/amd/display: Deduplicate DCN DDC register assignment
+
+>From b61fa578ecb3800b4b0391c8d86f6d67c48a7cd9 Mon Sep 17 00:00:00 2001
+From: #### <####>
+Date: Tue, 17 Feb 2026 17:49:26 -0300
+Subject: [PATCH] drm/amd/display: Deduplicate DCN DDC register assignment
+
+Several DCN generations implement identical define_ddc_registers()
+functions to assign DDC register, shift and mask pointers based on
+GPIO ID.
+
+Introduce a shared inline helper,
+dcn_define_ddc_registers_common(), and convert all DCN
+implementations to use it.
+
+This reduces duplication and improves maintainability without
+changing behavior.
+
+No functional changes intended.
+
+Signed-off-by: #### <####>
+---
+ .../display/dc/gpio/dcn20/hw_factory_dcn20.c  | 27 ++++---------
+ .../display/dc/gpio/dcn21/hw_factory_dcn21.c  | 27 ++++---------
+ .../display/dc/gpio/dcn30/hw_factory_dcn30.c  | 27 ++++---------
+ .../dc/gpio/dcn315/hw_factory_dcn315.c        | 27 ++++---------
+ .../display/dc/gpio/dcn32/hw_factory_dcn32.c  | 27 ++++---------
+ .../dc/gpio/dcn401/hw_factory_dcn401.c        | 26 ++++---------
+ .../amd/display/dc/gpio/hw_factory_dcn_ddc.h  | 39 +++++++++++++++++++
+ 7 files changed, 86 insertions(+), 114 deletions(-)
+ create mode 100644 drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+b/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+index e0bd0c722e00..905d14079b91 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn20/hw_factory_dcn20.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn20.h"
+
+
+@@ -182,25 +184,12 @@ static void define_ddc_registers(
+         struct hw_gpio_pin *pin,
+         uint32_t en)
+ {
+-    struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-    switch (pin->id) {
+-    case GPIO_ID_DDC_DATA:
+-        ddc->regs = &ddc_data_regs_dcn[en];
+-        ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-        break;
+-    case GPIO_ID_DDC_CLOCK:
+-        ddc->regs = &ddc_clk_regs_dcn[en];
+-        ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-        break;
+-    default:
+-        ASSERT_CRITICAL(false);
+-        return;
+-    }
+-
+-    ddc->shifts = &ddc_shift[en];
+-    ddc->masks = &ddc_mask[en];
+-
++    dcn_define_ddc_registers_common(
++        pin, en,
++        ddc_data_regs_dcn,
++        ddc_clk_regs_dcn,
++        ddc_shift,
++        ddc_mask);
+ }
+
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+b/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+index 2f57ee6deabc..f347b8c7e2b6 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn21/hw_factory_dcn21.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn21.h"
+
+ #include "dcn/dcn_2_1_0_offset.h"
+@@ -170,25 +172,12 @@ static void define_ddc_registers(
+         struct hw_gpio_pin *pin,
+         uint32_t en)
+ {
+-    struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-    switch (pin->id) {
+-    case GPIO_ID_DDC_DATA:
+-        ddc->regs = &ddc_data_regs_dcn[en];
+-        ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-        break;
+-    case GPIO_ID_DDC_CLOCK:
+-        ddc->regs = &ddc_clk_regs_dcn[en];
+-        ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-        break;
+-    default:
+-        ASSERT_CRITICAL(false);
+-        return;
+-    }
+-
+-    ddc->shifts = &ddc_shift[en];
+-    ddc->masks = &ddc_mask[en];
+-
++    dcn_define_ddc_registers_common(
++        pin, en,
++        ddc_data_regs_dcn,
++        ddc_clk_regs_dcn,
++        ddc_shift,
++        ddc_mask);
+ }
+
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+b/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+index 36a5736c58c9..25eef1ee10fe 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn30/hw_factory_dcn30.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn30.h"
+
+
+@@ -199,25 +201,12 @@ static void define_ddc_registers(
+         struct hw_gpio_pin *pin,
+         uint32_t en)
+ {
+-    struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-    switch (pin->id) {
+-    case GPIO_ID_DDC_DATA:
+-        ddc->regs = &ddc_data_regs_dcn[en];
+-        ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-        break;
+-    case GPIO_ID_DDC_CLOCK:
+-        ddc->regs = &ddc_clk_regs_dcn[en];
+-        ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-        break;
+-    default:
+-        ASSERT_CRITICAL(false);
+-        return;
+-    }
+-
+-    ddc->shifts = &ddc_shift[en];
+-    ddc->masks = &ddc_mask[en];
+-
++    dcn_define_ddc_registers_common(
++        pin, en,
++        ddc_data_regs_dcn,
++        ddc_clk_regs_dcn,
++        ddc_shift,
++        ddc_mask);
+ }
+
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+b/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+index 5feebb3b95ca..571a6f1b0cf9 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn315/hw_factory_dcn315.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn315.h"
+
+ #include "dcn/dcn_3_1_5_offset.h"
+@@ -191,25 +193,12 @@ static void define_ddc_registers(
+         struct hw_gpio_pin *pin,
+         uint32_t en)
+ {
+-    struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-    switch (pin->id) {
+-    case GPIO_ID_DDC_DATA:
+-        ddc->regs = &ddc_data_regs_dcn[en];
+-        ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-        break;
+-    case GPIO_ID_DDC_CLOCK:
+-        ddc->regs = &ddc_clk_regs_dcn[en];
+-        ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-        break;
+-    default:
+-        ASSERT_CRITICAL(false);
+-        return;
+-    }
+-
+-    ddc->shifts = &ddc_shift[en];
+-    ddc->masks = &ddc_mask[en];
+-
++    dcn_define_ddc_registers_common(
++        pin, en,
++        ddc_data_regs_dcn,
++        ddc_clk_regs_dcn,
++        ddc_shift,
++        ddc_mask);
+ }
+
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+b/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+index 985f10b39750..d6e97b246bae 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn32/hw_factory_dcn32.c
+@@ -32,6 +32,8 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+
++#include "../hw_factory_dcn_ddc.h"
++
+ #include "hw_factory_dcn32.h"
+
+ #include "dcn/dcn_3_2_0_offset.h"
+@@ -203,25 +205,12 @@ static void define_ddc_registers(
+         struct hw_gpio_pin *pin,
+         uint32_t en)
+ {
+-    struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-    switch (pin->id) {
+-    case GPIO_ID_DDC_DATA:
+-        ddc->regs = &ddc_data_regs_dcn[en];
+-        ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-        break;
+-    case GPIO_ID_DDC_CLOCK:
+-        ddc->regs = &ddc_clk_regs_dcn[en];
+-        ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-        break;
+-    default:
+-        ASSERT_CRITICAL(false);
+-        return;
+-    }
+-
+-    ddc->shifts = &ddc_shift[en];
+-    ddc->masks = &ddc_mask[en];
+-
++    dcn_define_ddc_registers_common(
++        pin, en,
++        ddc_data_regs_dcn,
++        ddc_clk_regs_dcn,
++        ddc_shift,
++        ddc_mask);
+ }
+
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+b/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+index 928abca18a18..06a4d7a8a1ac 100644
+--- a/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
++++ b/drivers/gpu/drm/amd/display/dc/gpio/dcn401/hw_factory_dcn401.c
+@@ -12,6 +12,7 @@
+ #include "../hw_hpd.h"
+ #include "../hw_generic.h"
+
++#include "../hw_factory_dcn_ddc.h"
+
+ #include "dcn/dcn_4_1_0_offset.h"
+ #include "dcn/dcn_4_1_0_sh_mask.h"
+@@ -195,25 +196,12 @@ static void define_ddc_registers(
+         struct hw_gpio_pin *pin,
+         uint32_t en)
+ {
+-    struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+-
+-    switch (pin->id) {
+-    case GPIO_ID_DDC_DATA:
+-        ddc->regs = &ddc_data_regs_dcn[en];
+-        ddc->base.regs = &ddc_data_regs_dcn[en].gpio;
+-        break;
+-    case GPIO_ID_DDC_CLOCK:
+-        ddc->regs = &ddc_clk_regs_dcn[en];
+-        ddc->base.regs = &ddc_clk_regs_dcn[en].gpio;
+-        break;
+-    default:
+-        ASSERT_CRITICAL(false);
+-        return;
+-    }
+-
+-    ddc->shifts = &ddc_shift[en];
+-    ddc->masks = &ddc_mask[en];
+-
++    dcn_define_ddc_registers_common(
++        pin, en,
++        ddc_data_regs_dcn,
++        ddc_clk_regs_dcn,
++        ddc_shift,
++        ddc_mask);
+ }
+
+ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+diff --git a/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+b/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+new file mode 100644
+index 000000000000..1f2bc7eea82e
+--- /dev/null
++++ b/drivers/gpu/drm/amd/display/dc/gpio/hw_factory_dcn_ddc.h
+@@ -0,0 +1,39 @@
++/* SPDX-License-Identifier: MIT */
++/*
++ * Copyright 2024 Advanced Micro Devices, Inc.
++ */
++
++#ifndef __DAL_HW_FACTORY_DCN_DDC_H__
++#define __DAL_HW_FACTORY_DCN_DDC_H__
++
++static inline void dcn_define_ddc_registers_common(
++        struct hw_gpio_pin *pin,
++        uint32_t en,
++        const struct ddc_registers *data_regs,
++        const struct ddc_registers *clk_regs,
++        const struct ddc_shift *shift,
++        const struct ddc_mask *mask)
++{
++    struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
++
++    switch (pin->id) {
++    case GPIO_ID_DDC_DATA:
++        ddc->regs = &data_regs[en];
++        ddc->base.regs = &data_regs[en].gpio;
++        break;
++
++    case GPIO_ID_DDC_CLOCK:
++        ddc->regs = &clk_regs[en];
++        ddc->base.regs = &clk_regs[en].gpio;
++        break;
++
++    default:
++        ASSERT_CRITICAL(false);
++        return;
++    }
++
++    ddc->shifts = &shift[en];
++    ddc->masks = &mask[en];
++}
++
++#endif /* __DAL_HW_FACTORY_DCN_DDC_H__ */
+-- 
+2.47.3
+

@@ -1,0 +1,2510 @@
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH 0/3] iio: adc: xilinx-ams: refactor alarm handling to table-driven design
+
+This series addresses significant code duplication in alarm handling
+logic across the Xilinx AMS IIO driver.
+
+An analysis of the codebase (ArKanjo explorer) revealed multiple
+duplicated mappings between scan_index, alarm bits, and register
+offsets.
+
+To address this, the series introduces a centralized table-driven
+mapping (alarm_map) that replaces multiple switch statements spread
+across the driver.
+
+This improves:
+- maintainability (single source of truth for mappings)
+- readability (removes repeated switch logic)
+- extensibility (new alarms require only table updates)
+
+No functional changes are intended.
+
+Series overview:
+- Patch 1: fix out-of-bounds channel lookup 
+- Patch 2: convert mutex handling to guard(mutex) 
+- Patch 3: introduce table-driven alarm mapping
+
+Guilherme Ivo Bozi (3):
+  iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event
+    handling
+  iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+  iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+ drivers/iio/adc/xilinx-ams.c | 192 +++++++++++++----------------------
+ 1 file changed, 73 insertions(+), 119 deletions(-)
+
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event handling
+
+ams_event_to_channel() may return a pointer past the end of
+dev->channels when no matching scan_index is found. This can lead
+to invalid memory access in ams_handle_event().
+
+Add a bounds check in ams_event_to_channel() and return NULL when
+no channel is found. Also guard the caller to safely handle this
+case.
+
+Fixes: <d5c70627a79455154f5f636096abe6fe57510605>
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 124470c92529..f364e69a5a0d 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -871,6 +871,9 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		if (dev->channels[i].scan_index == scan_index)
+ 			break;
+ 
++	if (i >= dev->num_channels)
++		return NULL;
++
+ 	return &dev->channels[i];
+ }
+ 
+@@ -1012,6 +1015,8 @@ static void ams_handle_event(struct iio_dev *indio_dev, u32 event)
+ 	const struct iio_chan_spec *chan;
+ 
+ 	chan = ams_event_to_channel(indio_dev, event);
++	if (!chan)
++		return;
+ 
+ 	if (chan->type == IIO_TEMP) {
+ 		/*
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH 2/3] iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+
+Replace open-coded mutex_lock()/mutex_unlock() pairs with
+guard(mutex) to simplify locking and ensure proper unlock on
+all control flow paths.
+
+This removes explicit unlock handling, reduces boilerplate,
+and avoids potential mistakes in error paths while keeping
+the behavior unchanged.
+
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 24 ++++++++----------------
+ 1 file changed, 8 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index f364e69a5a0d..1d84310b61a9 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -720,22 +720,20 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	int ret;
+ 
+ 	switch (mask) {
+-	case IIO_CHAN_INFO_RAW:
+-		mutex_lock(&ams->lock);
++	case IIO_CHAN_INFO_RAW: {
++		guard(mutex)(&ams->lock);
+ 		if (chan->scan_index >= AMS_CTRL_SEQ_BASE) {
+ 			ret = ams_read_vcc_reg(ams, chan->address, val);
+ 			if (ret)
+-				goto unlock_mutex;
++				return ret;
+ 			ams_enable_channel_sequence(indio_dev);
+ 		} else if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 			*val = readl(ams->pl_base + chan->address);
+ 		else
+ 			*val = readl(ams->ps_base + chan->address);
+ 
+-		ret = IIO_VAL_INT;
+-unlock_mutex:
+-		mutex_unlock(&ams->lock);
+-		return ret;
++		return IIO_VAL_INT;
++	}
+ 	case IIO_CHAN_INFO_SCALE:
+ 		switch (chan->type) {
+ 		case IIO_VOLTAGE:
+@@ -939,7 +937,7 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	alarm = ams_get_alarm_mask(chan->scan_index);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (state)
+ 		ams->alarm_mask |= alarm;
+@@ -948,8 +946,6 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	ams_update_alarm(ams, ams->alarm_mask);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+@@ -962,15 +958,13 @@ static int ams_read_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset = ams_get_alarm_offset(chan->scan_index, dir);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 		*val = readl(ams->pl_base + offset);
+ 	else
+ 		*val = readl(ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return IIO_VAL_INT;
+ }
+ 
+@@ -983,7 +977,7 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset;
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	/* Set temperature channel threshold to direct threshold */
+ 	if (chan->type == IIO_TEMP) {
+@@ -1005,8 +999,6 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	else
+ 		writel(val, ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH 3/3] iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+Replace multiple open-coded switch statements that map between
+scan_index, alarm bits, and register offsets with a centralized
+table-driven approach.
+
+Introduce a struct-based alarm_map to describe the relationship
+between scan indices and alarm offsets, and add a helper to
+translate scan_index to event IDs. This removes duplicated logic
+across ams_get_alarm_offset(), ams_event_to_channel(), and
+ams_get_alarm_mask().
+
+The new approach improves maintainability, reduces code size,
+and makes it easier to extend or modify alarm mappings in the
+future, while preserving existing behavior.
+
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 163 +++++++++++++----------------------
+ 1 file changed, 60 insertions(+), 103 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 1d84310b61a9..d5ed2e787641 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -102,6 +102,7 @@
+ #define AMS_PS_SEQ_MASK			GENMASK(21, 0)
+ #define AMS_PL_SEQ_MASK			GENMASK_ULL(59, 22)
+ 
++#define AMS_ALARM_INVALID		-1
+ #define AMS_ALARM_TEMP			0x140
+ #define AMS_ALARM_SUPPLY1		0x144
+ #define AMS_ALARM_SUPPLY2		0x148
+@@ -763,9 +764,51 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	}
+ }
+ 
++struct ams_alarm_map {
++	enum ams_ps_pl_seq scan_index;
++	int base_offset;
++};
++
++/*
++ * Array index matches enum ams_alarm_bit.
++ * Entries with base_offset == AMS_ALARM_INVALID are unused/invalid
++ * (e.g. RESERVED) and must be skipped.
++ */
++static const struct ams_alarm_map alarm_map[] = {
++	[AMS_ALARM_BIT_TEMP] = { AMS_SEQ_TEMP, AMS_ALARM_TEMP },
++	[AMS_ALARM_BIT_SUPPLY1] = { AMS_SEQ_SUPPLY1, AMS_ALARM_SUPPLY1 },
++	[AMS_ALARM_BIT_SUPPLY2] = { AMS_SEQ_SUPPLY2, AMS_ALARM_SUPPLY2 },
++	[AMS_ALARM_BIT_SUPPLY3] = { AMS_SEQ_SUPPLY3, AMS_ALARM_SUPPLY3 },
++	[AMS_ALARM_BIT_SUPPLY4] = { AMS_SEQ_SUPPLY4, AMS_ALARM_SUPPLY4 },
++	[AMS_ALARM_BIT_SUPPLY5] = { AMS_SEQ_SUPPLY5, AMS_ALARM_SUPPLY5 },
++	[AMS_ALARM_BIT_SUPPLY6] = { AMS_SEQ_SUPPLY6, AMS_ALARM_SUPPLY6 },
++	[AMS_ALARM_BIT_RESERVED] = { 0, AMS_ALARM_INVALID },
++	[AMS_ALARM_BIT_SUPPLY7] = { AMS_SEQ_SUPPLY7, AMS_ALARM_SUPPLY7 },
++	[AMS_ALARM_BIT_SUPPLY8] = { AMS_SEQ_SUPPLY8, AMS_ALARM_SUPPLY8 },
++	[AMS_ALARM_BIT_SUPPLY9] = { AMS_SEQ_SUPPLY9, AMS_ALARM_SUPPLY9 },
++	[AMS_ALARM_BIT_SUPPLY10] = { AMS_SEQ_SUPPLY10, AMS_ALARM_SUPPLY10 },
++	[AMS_ALARM_BIT_VCCAMS] = { AMS_SEQ_VCCAMS, AMS_ALARM_VCCAMS },
++	[AMS_ALARM_BIT_TEMP_REMOTE] = { AMS_SEQ_TEMP_REMOTE, AMS_ALARM_TEMP_REMOTE }
++};
++
++static int ams_scan_index_to_event(int scan_index)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(alarm_map); i++) {
++		if (alarm_map[i].base_offset == AMS_ALARM_INVALID)
++			continue;
++
++		if (alarm_map[i].scan_index == scan_index)
++			return i;
++	}
++
++	return -EINVAL;
++}
++
+ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ {
+-	int offset;
++	int offset, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX)
+ 		scan_index -= AMS_PS_SEQ_MAX;
+@@ -779,36 +822,11 @@ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ 		offset = 0;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return AMS_ALARM_TEMP + offset;
+-	case AMS_SEQ_SUPPLY1:
+-		return AMS_ALARM_SUPPLY1 + offset;
+-	case AMS_SEQ_SUPPLY2:
+-		return AMS_ALARM_SUPPLY2 + offset;
+-	case AMS_SEQ_SUPPLY3:
+-		return AMS_ALARM_SUPPLY3 + offset;
+-	case AMS_SEQ_SUPPLY4:
+-		return AMS_ALARM_SUPPLY4 + offset;
+-	case AMS_SEQ_SUPPLY5:
+-		return AMS_ALARM_SUPPLY5 + offset;
+-	case AMS_SEQ_SUPPLY6:
+-		return AMS_ALARM_SUPPLY6 + offset;
+-	case AMS_SEQ_SUPPLY7:
+-		return AMS_ALARM_SUPPLY7 + offset;
+-	case AMS_SEQ_SUPPLY8:
+-		return AMS_ALARM_SUPPLY8 + offset;
+-	case AMS_SEQ_SUPPLY9:
+-		return AMS_ALARM_SUPPLY9 + offset;
+-	case AMS_SEQ_SUPPLY10:
+-		return AMS_ALARM_SUPPLY10 + offset;
+-	case AMS_SEQ_VCCAMS:
+-		return AMS_ALARM_VCCAMS + offset;
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return AMS_ALARM_TEMP_REMOTE + offset;
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0 || alarm_map[event].base_offset == AMS_ALARM_INVALID)
+ 		return 0;
+-	}
++
++	return alarm_map[event].base_offset + offset;
+ }
+ 
+ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+@@ -821,49 +839,13 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		scan_index = AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (event) {
+-	case AMS_ALARM_BIT_TEMP:
+-		scan_index += AMS_SEQ_TEMP;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY1:
+-		scan_index += AMS_SEQ_SUPPLY1;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY2:
+-		scan_index += AMS_SEQ_SUPPLY2;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY3:
+-		scan_index += AMS_SEQ_SUPPLY3;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY4:
+-		scan_index += AMS_SEQ_SUPPLY4;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY5:
+-		scan_index += AMS_SEQ_SUPPLY5;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY6:
+-		scan_index += AMS_SEQ_SUPPLY6;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY7:
+-		scan_index += AMS_SEQ_SUPPLY7;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY8:
+-		scan_index += AMS_SEQ_SUPPLY8;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY9:
+-		scan_index += AMS_SEQ_SUPPLY9;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY10:
+-		scan_index += AMS_SEQ_SUPPLY10;
+-		break;
+-	case AMS_ALARM_BIT_VCCAMS:
+-		scan_index += AMS_SEQ_VCCAMS;
+-		break;
+-	case AMS_ALARM_BIT_TEMP_REMOTE:
+-		scan_index += AMS_SEQ_TEMP_REMOTE;
+-		break;
+-	default:
+-		break;
+-	}
++	if (event < 0 || event >= ARRAY_SIZE(alarm_map))
++		return NULL;
++
++	if (alarm_map[event].base_offset == AMS_ALARM_INVALID)
++		return NULL;
++
++	scan_index += alarm_map[event].scan_index;
+ 
+ 	for (i = 0; i < dev->num_channels; i++)
+ 		if (dev->channels[i].scan_index == scan_index)
+@@ -877,43 +859,18 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 
+ static int ams_get_alarm_mask(int scan_index)
+ {
+-	int bit = 0;
++	int bit = 0, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX) {
+ 		bit = AMS_PL_ALARM_START;
+ 		scan_index -= AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return BIT(AMS_ALARM_BIT_TEMP + bit);
+-	case AMS_SEQ_SUPPLY1:
+-		return BIT(AMS_ALARM_BIT_SUPPLY1 + bit);
+-	case AMS_SEQ_SUPPLY2:
+-		return BIT(AMS_ALARM_BIT_SUPPLY2 + bit);
+-	case AMS_SEQ_SUPPLY3:
+-		return BIT(AMS_ALARM_BIT_SUPPLY3 + bit);
+-	case AMS_SEQ_SUPPLY4:
+-		return BIT(AMS_ALARM_BIT_SUPPLY4 + bit);
+-	case AMS_SEQ_SUPPLY5:
+-		return BIT(AMS_ALARM_BIT_SUPPLY5 + bit);
+-	case AMS_SEQ_SUPPLY6:
+-		return BIT(AMS_ALARM_BIT_SUPPLY6 + bit);
+-	case AMS_SEQ_SUPPLY7:
+-		return BIT(AMS_ALARM_BIT_SUPPLY7 + bit);
+-	case AMS_SEQ_SUPPLY8:
+-		return BIT(AMS_ALARM_BIT_SUPPLY8 + bit);
+-	case AMS_SEQ_SUPPLY9:
+-		return BIT(AMS_ALARM_BIT_SUPPLY9 + bit);
+-	case AMS_SEQ_SUPPLY10:
+-		return BIT(AMS_ALARM_BIT_SUPPLY10 + bit);
+-	case AMS_SEQ_VCCAMS:
+-		return BIT(AMS_ALARM_BIT_VCCAMS + bit);
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return BIT(AMS_ALARM_BIT_TEMP_REMOTE + bit);
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0)
+ 		return 0;
+-	}
++
++	return BIT(event + bit);
+ }
+ 
+ static int ams_read_event_config(struct iio_dev *indio_dev,
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel
+
+On Tue, Apr 14, 2026 at 06:29:28AM -0300, Guilherme Ivo Bozi wrote:
+> ams_event_to_channel() may return a pointer past the end of
+> dev->channels when no matching scan_index is found. This can lead
+> to invalid memory access in ams_handle_event().
+> 
+> Add a bounds check in ams_event_to_channel() and return NULL when
+> no channel is found. Also guard the caller to safely handle this
+> case.
+
+> Fixes: <d5c70627a79455154f5f636096abe6fe57510605>
+
+Incorrect format of the Fixes tag. Please, consult with Submitting Patches
+documentation on that matter.
+
+-- 
+With Best Regards,
+Andy Shevchenko
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH 2/3] iio: adc: xilinx-ams: use guard(mutex) for automatic
+
+On Tue, Apr 14, 2026 at 06:29:29AM -0300, Guilherme Ivo Bozi wrote:
+> Replace open-coded mutex_lock()/mutex_unlock() pairs with
+> guard(mutex) to simplify locking and ensure proper unlock on
+> all control flow paths.
+> 
+> This removes explicit unlock handling, reduces boilerplate,
+> and avoids potential mistakes in error paths while keeping
+> the behavior unchanged.
+
+OK.
+Reviewed-by: #### <####>
+
+-- 
+With Best Regards,
+Andy Shevchenko
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH 3/3] iio: adc: xilinx-ams: refactor alarm mapping to
+
+On Tue, Apr 14, 2026 at 06:29:30AM -0300, Guilherme Ivo Bozi wrote:
+> Replace multiple open-coded switch statements that map between
+> scan_index, alarm bits, and register offsets with a centralized
+> table-driven approach.
+> 
+> Introduce a struct-based alarm_map to describe the relationship
+> between scan indices and alarm offsets, and add a helper to
+> translate scan_index to event IDs. This removes duplicated logic
+> across ams_get_alarm_offset(), ams_event_to_channel(), and
+> ams_get_alarm_mask().
+> 
+> The new approach improves maintainability, reduces code size,
+> and makes it easier to extend or modify alarm mappings in the
+> future, while preserving existing behavior.
+
+...
+
+> +#define AMS_ALARM_INVALID		-1
+
+This value sounds like out of the range, also signed.
+Can't 0x000 be used instead?
+
+#define AMS_ALARM_NONE			0x000 /* not a real offset */
+
+>  #define AMS_ALARM_TEMP			0x140
+>  #define AMS_ALARM_SUPPLY1		0x144
+>  #define AMS_ALARM_SUPPLY2		0x148
+
+...
+
+> +struct ams_alarm_map {
+> +	enum ams_ps_pl_seq scan_index;
+> +	int base_offset;
+
+With the above we put this as u32 (or whatever is used for offsets).
+
+> +};
+
+...
+
+> +static int ams_scan_index_to_event(int scan_index)
+> +{
+> +	int i;
+> +
+> +	for (i = 0; i < ARRAY_SIZE(alarm_map); i++) {
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(alarm_map); i++) {
+
+> +		if (alarm_map[i].base_offset == AMS_ALARM_INVALID)
+> +			continue;
+> +
+> +		if (alarm_map[i].scan_index == scan_index)
+> +			return i;
+> +	}
+> +
+> +	return -EINVAL;
+> +}
+
+-- 
+With Best Regards,
+Andy Shevchenko
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v2 0/3] iio: adc: xilinx-ams: refactor alarm handling to table-driven design
+
+This series addresses significant code duplication in alarm handling
+logic across the Xilinx AMS IIO driver.
+
+To address this, the series introduces a centralized table-driven
+mapping (alarm_map) that replaces multiple switch statements spread
+across the driver.
+
+This improves:
+- maintainability (single source of truth for mappings)
+- readability (removes repeated switch logic)
+- extensibility (new alarms require only table updates)
+
+No functional changes are intended.
+
+Series overview:
+- Patch 1: fix out-of-bounds channel lookup 
+- Patch 2: convert mutex handling to guard(mutex) 
+- Patch 3: introduce table-driven alarm mapping
+
+v1 -> v2:
+- Fixed Fixes tag format
+- Replaced AMS_ALARM_INVALID with AMS_ALARM_NONE
+- Changed alarm_map base_offset type
+
+Guilherme Ivo Bozi (3):
+  iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event
+    handling
+  iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+  iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+ drivers/iio/adc/xilinx-ams.c | 190 +++++++++++++----------------------
+ 1 file changed, 71 insertions(+), 119 deletions(-)
+
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v2 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event handling
+
+ams_event_to_channel() may return a pointer past the end of
+dev->channels when no matching scan_index is found. This can lead
+to invalid memory access in ams_handle_event().
+
+Add a bounds check in ams_event_to_channel() and return NULL when
+no channel is found. Also guard the caller to safely handle this
+case.
+
+Fixes: d5c70627a794 ("iio: adc: Add Xilinx AMS driver")
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 124470c92529..f364e69a5a0d 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -871,6 +871,9 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		if (dev->channels[i].scan_index == scan_index)
+ 			break;
+ 
++	if (i >= dev->num_channels)
++		return NULL;
++
+ 	return &dev->channels[i];
+ }
+ 
+@@ -1012,6 +1015,8 @@ static void ams_handle_event(struct iio_dev *indio_dev, u32 event)
+ 	const struct iio_chan_spec *chan;
+ 
+ 	chan = ams_event_to_channel(indio_dev, event);
++	if (!chan)
++		return;
+ 
+ 	if (chan->type == IIO_TEMP) {
+ 		/*
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v2 2/3] iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+
+Replace open-coded mutex_lock()/mutex_unlock() pairs with
+guard(mutex) to simplify locking and ensure proper unlock on
+all control flow paths.
+
+This removes explicit unlock handling, reduces boilerplate,
+and avoids potential mistakes in error paths while keeping
+the behavior unchanged.
+
+Signed-off-by: #### <####>
+Reviewed-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 24 ++++++++----------------
+ 1 file changed, 8 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index f364e69a5a0d..1d84310b61a9 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -720,22 +720,20 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	int ret;
+ 
+ 	switch (mask) {
+-	case IIO_CHAN_INFO_RAW:
+-		mutex_lock(&ams->lock);
++	case IIO_CHAN_INFO_RAW: {
++		guard(mutex)(&ams->lock);
+ 		if (chan->scan_index >= AMS_CTRL_SEQ_BASE) {
+ 			ret = ams_read_vcc_reg(ams, chan->address, val);
+ 			if (ret)
+-				goto unlock_mutex;
++				return ret;
+ 			ams_enable_channel_sequence(indio_dev);
+ 		} else if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 			*val = readl(ams->pl_base + chan->address);
+ 		else
+ 			*val = readl(ams->ps_base + chan->address);
+ 
+-		ret = IIO_VAL_INT;
+-unlock_mutex:
+-		mutex_unlock(&ams->lock);
+-		return ret;
++		return IIO_VAL_INT;
++	}
+ 	case IIO_CHAN_INFO_SCALE:
+ 		switch (chan->type) {
+ 		case IIO_VOLTAGE:
+@@ -939,7 +937,7 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	alarm = ams_get_alarm_mask(chan->scan_index);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (state)
+ 		ams->alarm_mask |= alarm;
+@@ -948,8 +946,6 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	ams_update_alarm(ams, ams->alarm_mask);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+@@ -962,15 +958,13 @@ static int ams_read_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset = ams_get_alarm_offset(chan->scan_index, dir);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 		*val = readl(ams->pl_base + offset);
+ 	else
+ 		*val = readl(ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return IIO_VAL_INT;
+ }
+ 
+@@ -983,7 +977,7 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset;
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	/* Set temperature channel threshold to direct threshold */
+ 	if (chan->type == IIO_TEMP) {
+@@ -1005,8 +999,6 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	else
+ 		writel(val, ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v2 3/3] iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+Replace multiple open-coded switch statements that map between
+scan_index, alarm bits, and register offsets with a centralized
+table-driven approach.
+
+Introduce a struct-based alarm_map to describe the relationship
+between scan indices and alarm offsets, and add a helper to
+translate scan_index to event IDs. This removes duplicated logic
+across ams_get_alarm_offset(), ams_event_to_channel(), and
+ams_get_alarm_mask().
+
+The new approach improves maintainability, reduces code size,
+and makes it easier to extend or modify alarm mappings in the
+future, while preserving existing behavior.
+
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 161 +++++++++++++----------------------
+ 1 file changed, 58 insertions(+), 103 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 1d84310b61a9..90343d94cf95 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -102,6 +102,7 @@
+ #define AMS_PS_SEQ_MASK			GENMASK(21, 0)
+ #define AMS_PL_SEQ_MASK			GENMASK_ULL(59, 22)
+ 
++#define AMS_ALARM_NONE			0x000 /* not a real offset */
+ #define AMS_ALARM_TEMP			0x140
+ #define AMS_ALARM_SUPPLY1		0x144
+ #define AMS_ALARM_SUPPLY2		0x148
+@@ -763,9 +764,49 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	}
+ }
+ 
++struct ams_alarm_map {
++	enum ams_ps_pl_seq scan_index;
++	unsigned int base_offset;
++};
++
++/*
++ * Array index matches enum ams_alarm_bit.
++ * Entries with base_offset == AMS_ALARM_NONE are unused/invalid
++ * (e.g. RESERVED) and must be skipped.
++ */
++static const struct ams_alarm_map alarm_map[] = {
++	[AMS_ALARM_BIT_TEMP] = { AMS_SEQ_TEMP, AMS_ALARM_TEMP },
++	[AMS_ALARM_BIT_SUPPLY1] = { AMS_SEQ_SUPPLY1, AMS_ALARM_SUPPLY1 },
++	[AMS_ALARM_BIT_SUPPLY2] = { AMS_SEQ_SUPPLY2, AMS_ALARM_SUPPLY2 },
++	[AMS_ALARM_BIT_SUPPLY3] = { AMS_SEQ_SUPPLY3, AMS_ALARM_SUPPLY3 },
++	[AMS_ALARM_BIT_SUPPLY4] = { AMS_SEQ_SUPPLY4, AMS_ALARM_SUPPLY4 },
++	[AMS_ALARM_BIT_SUPPLY5] = { AMS_SEQ_SUPPLY5, AMS_ALARM_SUPPLY5 },
++	[AMS_ALARM_BIT_SUPPLY6] = { AMS_SEQ_SUPPLY6, AMS_ALARM_SUPPLY6 },
++	[AMS_ALARM_BIT_RESERVED] = { 0, AMS_ALARM_NONE },
++	[AMS_ALARM_BIT_SUPPLY7] = { AMS_SEQ_SUPPLY7, AMS_ALARM_SUPPLY7 },
++	[AMS_ALARM_BIT_SUPPLY8] = { AMS_SEQ_SUPPLY8, AMS_ALARM_SUPPLY8 },
++	[AMS_ALARM_BIT_SUPPLY9] = { AMS_SEQ_SUPPLY9, AMS_ALARM_SUPPLY9 },
++	[AMS_ALARM_BIT_SUPPLY10] = { AMS_SEQ_SUPPLY10, AMS_ALARM_SUPPLY10 },
++	[AMS_ALARM_BIT_VCCAMS] = { AMS_SEQ_VCCAMS, AMS_ALARM_VCCAMS },
++	[AMS_ALARM_BIT_TEMP_REMOTE] = { AMS_SEQ_TEMP_REMOTE, AMS_ALARM_TEMP_REMOTE }
++};
++
++static int ams_scan_index_to_event(int scan_index)
++{
++	for (unsigned int i = 0; i < ARRAY_SIZE(alarm_map); i++) {
++		if (alarm_map[i].base_offset == AMS_ALARM_NONE)
++			continue;
++
++		if (alarm_map[i].scan_index == scan_index)
++			return i;
++	}
++
++	return -EINVAL;
++}
++
+ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ {
+-	int offset;
++	int offset, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX)
+ 		scan_index -= AMS_PS_SEQ_MAX;
+@@ -779,36 +820,11 @@ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ 		offset = 0;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return AMS_ALARM_TEMP + offset;
+-	case AMS_SEQ_SUPPLY1:
+-		return AMS_ALARM_SUPPLY1 + offset;
+-	case AMS_SEQ_SUPPLY2:
+-		return AMS_ALARM_SUPPLY2 + offset;
+-	case AMS_SEQ_SUPPLY3:
+-		return AMS_ALARM_SUPPLY3 + offset;
+-	case AMS_SEQ_SUPPLY4:
+-		return AMS_ALARM_SUPPLY4 + offset;
+-	case AMS_SEQ_SUPPLY5:
+-		return AMS_ALARM_SUPPLY5 + offset;
+-	case AMS_SEQ_SUPPLY6:
+-		return AMS_ALARM_SUPPLY6 + offset;
+-	case AMS_SEQ_SUPPLY7:
+-		return AMS_ALARM_SUPPLY7 + offset;
+-	case AMS_SEQ_SUPPLY8:
+-		return AMS_ALARM_SUPPLY8 + offset;
+-	case AMS_SEQ_SUPPLY9:
+-		return AMS_ALARM_SUPPLY9 + offset;
+-	case AMS_SEQ_SUPPLY10:
+-		return AMS_ALARM_SUPPLY10 + offset;
+-	case AMS_SEQ_VCCAMS:
+-		return AMS_ALARM_VCCAMS + offset;
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return AMS_ALARM_TEMP_REMOTE + offset;
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0 || alarm_map[event].base_offset == AMS_ALARM_NONE)
+ 		return 0;
+-	}
++
++	return alarm_map[event].base_offset + offset;
+ }
+ 
+ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+@@ -821,49 +837,13 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		scan_index = AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (event) {
+-	case AMS_ALARM_BIT_TEMP:
+-		scan_index += AMS_SEQ_TEMP;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY1:
+-		scan_index += AMS_SEQ_SUPPLY1;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY2:
+-		scan_index += AMS_SEQ_SUPPLY2;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY3:
+-		scan_index += AMS_SEQ_SUPPLY3;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY4:
+-		scan_index += AMS_SEQ_SUPPLY4;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY5:
+-		scan_index += AMS_SEQ_SUPPLY5;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY6:
+-		scan_index += AMS_SEQ_SUPPLY6;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY7:
+-		scan_index += AMS_SEQ_SUPPLY7;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY8:
+-		scan_index += AMS_SEQ_SUPPLY8;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY9:
+-		scan_index += AMS_SEQ_SUPPLY9;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY10:
+-		scan_index += AMS_SEQ_SUPPLY10;
+-		break;
+-	case AMS_ALARM_BIT_VCCAMS:
+-		scan_index += AMS_SEQ_VCCAMS;
+-		break;
+-	case AMS_ALARM_BIT_TEMP_REMOTE:
+-		scan_index += AMS_SEQ_TEMP_REMOTE;
+-		break;
+-	default:
+-		break;
+-	}
++	if (event < 0 || event >= ARRAY_SIZE(alarm_map))
++		return NULL;
++
++	if (alarm_map[event].base_offset == AMS_ALARM_NONE)
++		return NULL;
++
++	scan_index += alarm_map[event].scan_index;
+ 
+ 	for (i = 0; i < dev->num_channels; i++)
+ 		if (dev->channels[i].scan_index == scan_index)
+@@ -877,43 +857,18 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 
+ static int ams_get_alarm_mask(int scan_index)
+ {
+-	int bit = 0;
++	int bit = 0, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX) {
+ 		bit = AMS_PL_ALARM_START;
+ 		scan_index -= AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return BIT(AMS_ALARM_BIT_TEMP + bit);
+-	case AMS_SEQ_SUPPLY1:
+-		return BIT(AMS_ALARM_BIT_SUPPLY1 + bit);
+-	case AMS_SEQ_SUPPLY2:
+-		return BIT(AMS_ALARM_BIT_SUPPLY2 + bit);
+-	case AMS_SEQ_SUPPLY3:
+-		return BIT(AMS_ALARM_BIT_SUPPLY3 + bit);
+-	case AMS_SEQ_SUPPLY4:
+-		return BIT(AMS_ALARM_BIT_SUPPLY4 + bit);
+-	case AMS_SEQ_SUPPLY5:
+-		return BIT(AMS_ALARM_BIT_SUPPLY5 + bit);
+-	case AMS_SEQ_SUPPLY6:
+-		return BIT(AMS_ALARM_BIT_SUPPLY6 + bit);
+-	case AMS_SEQ_SUPPLY7:
+-		return BIT(AMS_ALARM_BIT_SUPPLY7 + bit);
+-	case AMS_SEQ_SUPPLY8:
+-		return BIT(AMS_ALARM_BIT_SUPPLY8 + bit);
+-	case AMS_SEQ_SUPPLY9:
+-		return BIT(AMS_ALARM_BIT_SUPPLY9 + bit);
+-	case AMS_SEQ_SUPPLY10:
+-		return BIT(AMS_ALARM_BIT_SUPPLY10 + bit);
+-	case AMS_SEQ_VCCAMS:
+-		return BIT(AMS_ALARM_BIT_VCCAMS + bit);
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return BIT(AMS_ALARM_BIT_TEMP_REMOTE + bit);
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0)
+ 		return 0;
+-	}
++
++	return BIT(event + bit);
+ }
+ 
+ static int ams_read_event_config(struct iio_dev *indio_dev,
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v2 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+
+On Tue, Apr 14, 2026 at 07:29:16AM -0300, Guilherme Ivo Bozi wrote:
+> This series addresses significant code duplication in alarm handling
+> logic across the Xilinx AMS IIO driver.
+> 
+> To address this, the series introduces a centralized table-driven
+> mapping (alarm_map) that replaces multiple switch statements spread
+> across the driver.
+> 
+> This improves:
+> - maintainability (single source of truth for mappings)
+> - readability (removes repeated switch logic)
+> - extensibility (new alarms require only table updates)
+> 
+> No functional changes are intended.
+
+Please, do not send a new version in the same email thread!
+
+> Series overview:
+> - Patch 1: fix out-of-bounds channel lookup 
+> - Patch 2: convert mutex handling to guard(mutex) 
+> - Patch 3: introduce table-driven alarm mapping
+
+I will look into them later on.
+
+-- 
+With Best Regards,
+Andy Shevchenko
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v2 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel
+
+On Tue, Apr 14, 2026 at 07:29:17AM -0300, Guilherme Ivo Bozi wrote:
+> ams_event_to_channel() may return a pointer past the end of
+> dev->channels when no matching scan_index is found. This can lead
+> to invalid memory access in ams_handle_event().
+> 
+> Add a bounds check in ams_event_to_channel() and return NULL when
+> no channel is found. Also guard the caller to safely handle this
+> case.
+
+...
+
+> +	if (i >= dev->num_channels)
+
+The '==' is clearer. Otherwise, please justify the '>' part.
+
+> +		return NULL;
+
+...
+
+TBH I do not see how this code is not a dead code. But for the sake of
+robustness it might be added. I leave it up to the maintainer.
+
+-- 
+With Best Regards,
+Andy Shevchenko
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v2 3/3] iio: adc: xilinx-ams: refactor alarm mapping to
+
+On Tue, Apr 14, 2026 at 07:29:19AM -0300, Guilherme Ivo Bozi wrote:
+> Replace multiple open-coded switch statements that map between
+> scan_index, alarm bits, and register offsets with a centralized
+> table-driven approach.
+> 
+> Introduce a struct-based alarm_map to describe the relationship
+> between scan indices and alarm offsets, and add a helper to
+> translate scan_index to event IDs. This removes duplicated logic
+> across ams_get_alarm_offset(), ams_event_to_channel(), and
+> ams_get_alarm_mask().
+> 
+> The new approach improves maintainability, reduces code size,
+> and makes it easier to extend or modify alarm mappings in the
+> future, while preserving existing behavior.
+
+...
+
+> +static const struct ams_alarm_map alarm_map[] = {
+> +	[AMS_ALARM_BIT_TEMP] = { AMS_SEQ_TEMP, AMS_ALARM_TEMP },
+> +	[AMS_ALARM_BIT_SUPPLY1] = { AMS_SEQ_SUPPLY1, AMS_ALARM_SUPPLY1 },
+> +	[AMS_ALARM_BIT_SUPPLY2] = { AMS_SEQ_SUPPLY2, AMS_ALARM_SUPPLY2 },
+> +	[AMS_ALARM_BIT_SUPPLY3] = { AMS_SEQ_SUPPLY3, AMS_ALARM_SUPPLY3 },
+> +	[AMS_ALARM_BIT_SUPPLY4] = { AMS_SEQ_SUPPLY4, AMS_ALARM_SUPPLY4 },
+> +	[AMS_ALARM_BIT_SUPPLY5] = { AMS_SEQ_SUPPLY5, AMS_ALARM_SUPPLY5 },
+> +	[AMS_ALARM_BIT_SUPPLY6] = { AMS_SEQ_SUPPLY6, AMS_ALARM_SUPPLY6 },
+> +	[AMS_ALARM_BIT_RESERVED] = { 0, AMS_ALARM_NONE },
+> +	[AMS_ALARM_BIT_SUPPLY7] = { AMS_SEQ_SUPPLY7, AMS_ALARM_SUPPLY7 },
+> +	[AMS_ALARM_BIT_SUPPLY8] = { AMS_SEQ_SUPPLY8, AMS_ALARM_SUPPLY8 },
+> +	[AMS_ALARM_BIT_SUPPLY9] = { AMS_SEQ_SUPPLY9, AMS_ALARM_SUPPLY9 },
+> +	[AMS_ALARM_BIT_SUPPLY10] = { AMS_SEQ_SUPPLY10, AMS_ALARM_SUPPLY10 },
+> +	[AMS_ALARM_BIT_VCCAMS] = { AMS_SEQ_VCCAMS, AMS_ALARM_VCCAMS },
+> +	[AMS_ALARM_BIT_TEMP_REMOTE] = { AMS_SEQ_TEMP_REMOTE, AMS_ALARM_TEMP_REMOTE }
+
+Haven't noticed before, please leave a trailing comma here as it is not
+semantically a terminator entry.
+
+> +};
+
+
+-- 
+With Best Regards,
+Andy Shevchenko
+
+
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v4 0/3] iio: adc: xilinx-ams: refactor alarm handling to table-driven design
+
+This series addresses significant code duplication in alarm handling
+logic across the Xilinx AMS IIO driver.
+
+To address this, the series introduces a centralized table-driven
+mapping (alarm_map) that replaces multiple switch statements spread
+across the driver.
+
+This improves:
+- maintainability (single source of truth for mappings)
+- readability (removes repeated switch logic)
+- extensibility (new alarms require only table updates)
+
+No functional changes are intended.
+
+Series overview:
+- Patch 1: fix out-of-bounds channel lookup 
+- Patch 2: convert mutex handling to guard(mutex) 
+- Patch 3: introduce table-driven alarm mapping
+
+v1 -> v2:
+- Fixed Fixes tag format
+- Replaced AMS_ALARM_INVALID with AMS_ALARM_NONE
+- Changed alarm_map base_offset type
+
+v2 -> v3:
+- Replace 'i >= num_channels' with 'i == num_channels'
+- Add missing trailing comma in alarm_map array initializer
+
+v3 -> v4:
+- Removed unnecessary 'event < 0' check for type e32
+
+Guilherme Ivo Bozi (3):
+  iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event
+    handling
+  iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+  iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+ drivers/iio/adc/xilinx-ams.c | 190 +++++++++++++----------------------
+ 1 file changed, 71 insertions(+), 119 deletions(-)
+
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v4 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event handling
+
+ams_event_to_channel() may return a pointer past the end of
+dev->channels when no matching scan_index is found. This can lead
+to invalid memory access in ams_handle_event().
+
+Add a bounds check in ams_event_to_channel() and return NULL when
+no channel is found. Also guard the caller to safely handle this
+case.
+
+Fixes: d5c70627a794 ("iio: adc: Add Xilinx AMS driver")
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 124470c92529..6191cd1b29a5 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -871,6 +871,9 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		if (dev->channels[i].scan_index == scan_index)
+ 			break;
+ 
++	if (i == dev->num_channels)
++		return NULL;
++
+ 	return &dev->channels[i];
+ }
+ 
+@@ -1012,6 +1015,8 @@ static void ams_handle_event(struct iio_dev *indio_dev, u32 event)
+ 	const struct iio_chan_spec *chan;
+ 
+ 	chan = ams_event_to_channel(indio_dev, event);
++	if (!chan)
++		return;
+ 
+ 	if (chan->type == IIO_TEMP) {
+ 		/*
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v4 2/3] iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+
+Replace open-coded mutex_lock()/mutex_unlock() pairs with
+guard(mutex) to simplify locking and ensure proper unlock on
+all control flow paths.
+
+This removes explicit unlock handling, reduces boilerplate,
+and avoids potential mistakes in error paths while keeping
+the behavior unchanged.
+
+Signed-off-by: #### <####>
+Reviewed-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 24 ++++++++----------------
+ 1 file changed, 8 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 6191cd1b29a5..70a1f97f6dad 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -720,22 +720,20 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	int ret;
+ 
+ 	switch (mask) {
+-	case IIO_CHAN_INFO_RAW:
+-		mutex_lock(&ams->lock);
++	case IIO_CHAN_INFO_RAW: {
++		guard(mutex)(&ams->lock);
+ 		if (chan->scan_index >= AMS_CTRL_SEQ_BASE) {
+ 			ret = ams_read_vcc_reg(ams, chan->address, val);
+ 			if (ret)
+-				goto unlock_mutex;
++				return ret;
+ 			ams_enable_channel_sequence(indio_dev);
+ 		} else if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 			*val = readl(ams->pl_base + chan->address);
+ 		else
+ 			*val = readl(ams->ps_base + chan->address);
+ 
+-		ret = IIO_VAL_INT;
+-unlock_mutex:
+-		mutex_unlock(&ams->lock);
+-		return ret;
++		return IIO_VAL_INT;
++	}
+ 	case IIO_CHAN_INFO_SCALE:
+ 		switch (chan->type) {
+ 		case IIO_VOLTAGE:
+@@ -939,7 +937,7 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	alarm = ams_get_alarm_mask(chan->scan_index);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (state)
+ 		ams->alarm_mask |= alarm;
+@@ -948,8 +946,6 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	ams_update_alarm(ams, ams->alarm_mask);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+@@ -962,15 +958,13 @@ static int ams_read_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset = ams_get_alarm_offset(chan->scan_index, dir);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 		*val = readl(ams->pl_base + offset);
+ 	else
+ 		*val = readl(ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return IIO_VAL_INT;
+ }
+ 
+@@ -983,7 +977,7 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset;
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	/* Set temperature channel threshold to direct threshold */
+ 	if (chan->type == IIO_TEMP) {
+@@ -1005,8 +999,6 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	else
+ 		writel(val, ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v4 3/3] iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+Replace multiple open-coded switch statements that map between
+scan_index, alarm bits, and register offsets with a centralized
+table-driven approach.
+
+Introduce a struct-based alarm_map to describe the relationship
+between scan indices and alarm offsets, and add a helper to
+translate scan_index to event IDs. This removes duplicated logic
+across ams_get_alarm_offset(), ams_event_to_channel(), and
+ams_get_alarm_mask().
+
+The new approach improves maintainability, reduces code size,
+and makes it easier to extend or modify alarm mappings in the
+future, while preserving existing behavior.
+
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 161 +++++++++++++----------------------
+ 1 file changed, 58 insertions(+), 103 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 70a1f97f6dad..d38c4401dfce 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -102,6 +102,7 @@
+ #define AMS_PS_SEQ_MASK			GENMASK(21, 0)
+ #define AMS_PL_SEQ_MASK			GENMASK_ULL(59, 22)
+ 
++#define AMS_ALARM_NONE			0x000 /* not a real offset */
+ #define AMS_ALARM_TEMP			0x140
+ #define AMS_ALARM_SUPPLY1		0x144
+ #define AMS_ALARM_SUPPLY2		0x148
+@@ -763,9 +764,49 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	}
+ }
+ 
++struct ams_alarm_map {
++	enum ams_ps_pl_seq scan_index;
++	unsigned int base_offset;
++};
++
++/*
++ * Array index matches enum ams_alarm_bit.
++ * Entries with base_offset == AMS_ALARM_NONE are unused/invalid
++ * (e.g. RESERVED) and must be skipped.
++ */
++static const struct ams_alarm_map alarm_map[] = {
++	[AMS_ALARM_BIT_TEMP] = { AMS_SEQ_TEMP, AMS_ALARM_TEMP },
++	[AMS_ALARM_BIT_SUPPLY1] = { AMS_SEQ_SUPPLY1, AMS_ALARM_SUPPLY1 },
++	[AMS_ALARM_BIT_SUPPLY2] = { AMS_SEQ_SUPPLY2, AMS_ALARM_SUPPLY2 },
++	[AMS_ALARM_BIT_SUPPLY3] = { AMS_SEQ_SUPPLY3, AMS_ALARM_SUPPLY3 },
++	[AMS_ALARM_BIT_SUPPLY4] = { AMS_SEQ_SUPPLY4, AMS_ALARM_SUPPLY4 },
++	[AMS_ALARM_BIT_SUPPLY5] = { AMS_SEQ_SUPPLY5, AMS_ALARM_SUPPLY5 },
++	[AMS_ALARM_BIT_SUPPLY6] = { AMS_SEQ_SUPPLY6, AMS_ALARM_SUPPLY6 },
++	[AMS_ALARM_BIT_RESERVED] = { 0, AMS_ALARM_NONE },
++	[AMS_ALARM_BIT_SUPPLY7] = { AMS_SEQ_SUPPLY7, AMS_ALARM_SUPPLY7 },
++	[AMS_ALARM_BIT_SUPPLY8] = { AMS_SEQ_SUPPLY8, AMS_ALARM_SUPPLY8 },
++	[AMS_ALARM_BIT_SUPPLY9] = { AMS_SEQ_SUPPLY9, AMS_ALARM_SUPPLY9 },
++	[AMS_ALARM_BIT_SUPPLY10] = { AMS_SEQ_SUPPLY10, AMS_ALARM_SUPPLY10 },
++	[AMS_ALARM_BIT_VCCAMS] = { AMS_SEQ_VCCAMS, AMS_ALARM_VCCAMS },
++	[AMS_ALARM_BIT_TEMP_REMOTE] = { AMS_SEQ_TEMP_REMOTE, AMS_ALARM_TEMP_REMOTE },
++};
++
++static int ams_scan_index_to_event(int scan_index)
++{
++	for (unsigned int i = 0; i < ARRAY_SIZE(alarm_map); i++) {
++		if (alarm_map[i].base_offset == AMS_ALARM_NONE)
++			continue;
++
++		if (alarm_map[i].scan_index == scan_index)
++			return i;
++	}
++
++	return -EINVAL;
++}
++
+ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ {
+-	int offset;
++	int offset, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX)
+ 		scan_index -= AMS_PS_SEQ_MAX;
+@@ -779,36 +820,11 @@ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ 		offset = 0;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return AMS_ALARM_TEMP + offset;
+-	case AMS_SEQ_SUPPLY1:
+-		return AMS_ALARM_SUPPLY1 + offset;
+-	case AMS_SEQ_SUPPLY2:
+-		return AMS_ALARM_SUPPLY2 + offset;
+-	case AMS_SEQ_SUPPLY3:
+-		return AMS_ALARM_SUPPLY3 + offset;
+-	case AMS_SEQ_SUPPLY4:
+-		return AMS_ALARM_SUPPLY4 + offset;
+-	case AMS_SEQ_SUPPLY5:
+-		return AMS_ALARM_SUPPLY5 + offset;
+-	case AMS_SEQ_SUPPLY6:
+-		return AMS_ALARM_SUPPLY6 + offset;
+-	case AMS_SEQ_SUPPLY7:
+-		return AMS_ALARM_SUPPLY7 + offset;
+-	case AMS_SEQ_SUPPLY8:
+-		return AMS_ALARM_SUPPLY8 + offset;
+-	case AMS_SEQ_SUPPLY9:
+-		return AMS_ALARM_SUPPLY9 + offset;
+-	case AMS_SEQ_SUPPLY10:
+-		return AMS_ALARM_SUPPLY10 + offset;
+-	case AMS_SEQ_VCCAMS:
+-		return AMS_ALARM_VCCAMS + offset;
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return AMS_ALARM_TEMP_REMOTE + offset;
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0 || alarm_map[event].base_offset == AMS_ALARM_NONE)
+ 		return 0;
+-	}
++
++	return alarm_map[event].base_offset + offset;
+ }
+ 
+ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+@@ -821,49 +837,13 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		scan_index = AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (event) {
+-	case AMS_ALARM_BIT_TEMP:
+-		scan_index += AMS_SEQ_TEMP;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY1:
+-		scan_index += AMS_SEQ_SUPPLY1;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY2:
+-		scan_index += AMS_SEQ_SUPPLY2;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY3:
+-		scan_index += AMS_SEQ_SUPPLY3;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY4:
+-		scan_index += AMS_SEQ_SUPPLY4;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY5:
+-		scan_index += AMS_SEQ_SUPPLY5;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY6:
+-		scan_index += AMS_SEQ_SUPPLY6;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY7:
+-		scan_index += AMS_SEQ_SUPPLY7;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY8:
+-		scan_index += AMS_SEQ_SUPPLY8;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY9:
+-		scan_index += AMS_SEQ_SUPPLY9;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY10:
+-		scan_index += AMS_SEQ_SUPPLY10;
+-		break;
+-	case AMS_ALARM_BIT_VCCAMS:
+-		scan_index += AMS_SEQ_VCCAMS;
+-		break;
+-	case AMS_ALARM_BIT_TEMP_REMOTE:
+-		scan_index += AMS_SEQ_TEMP_REMOTE;
+-		break;
+-	default:
+-		break;
+-	}
++	if (event >= ARRAY_SIZE(alarm_map))
++		return NULL;
++
++	if (alarm_map[event].base_offset == AMS_ALARM_NONE)
++		return NULL;
++
++	scan_index += alarm_map[event].scan_index;
+ 
+ 	for (i = 0; i < dev->num_channels; i++)
+ 		if (dev->channels[i].scan_index == scan_index)
+@@ -877,43 +857,18 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 
+ static int ams_get_alarm_mask(int scan_index)
+ {
+-	int bit = 0;
++	int bit = 0, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX) {
+ 		bit = AMS_PL_ALARM_START;
+ 		scan_index -= AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return BIT(AMS_ALARM_BIT_TEMP + bit);
+-	case AMS_SEQ_SUPPLY1:
+-		return BIT(AMS_ALARM_BIT_SUPPLY1 + bit);
+-	case AMS_SEQ_SUPPLY2:
+-		return BIT(AMS_ALARM_BIT_SUPPLY2 + bit);
+-	case AMS_SEQ_SUPPLY3:
+-		return BIT(AMS_ALARM_BIT_SUPPLY3 + bit);
+-	case AMS_SEQ_SUPPLY4:
+-		return BIT(AMS_ALARM_BIT_SUPPLY4 + bit);
+-	case AMS_SEQ_SUPPLY5:
+-		return BIT(AMS_ALARM_BIT_SUPPLY5 + bit);
+-	case AMS_SEQ_SUPPLY6:
+-		return BIT(AMS_ALARM_BIT_SUPPLY6 + bit);
+-	case AMS_SEQ_SUPPLY7:
+-		return BIT(AMS_ALARM_BIT_SUPPLY7 + bit);
+-	case AMS_SEQ_SUPPLY8:
+-		return BIT(AMS_ALARM_BIT_SUPPLY8 + bit);
+-	case AMS_SEQ_SUPPLY9:
+-		return BIT(AMS_ALARM_BIT_SUPPLY9 + bit);
+-	case AMS_SEQ_SUPPLY10:
+-		return BIT(AMS_ALARM_BIT_SUPPLY10 + bit);
+-	case AMS_SEQ_VCCAMS:
+-		return BIT(AMS_ALARM_BIT_VCCAMS + bit);
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return BIT(AMS_ALARM_BIT_TEMP_REMOTE + bit);
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0)
+ 		return 0;
+-	}
++
++	return BIT(event + bit);
+ }
+ 
+ static int ams_read_event_config(struct iio_dev *indio_dev,
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Subject: Re: [PATCH v4 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+From: #### <####>
+
+Hi,
+
+On 5/13/2026 1:31 AM, Guilherme Ivo Bozi wrote:
+
+> v3 -> v4:
+> - Removed unnecessary 'event < 0' check for type e32
+
+Thanks for addressing the feedback.
+Tested on ZCU102 Rev1.0. Driver probes successfully with no errors.
+
+For the series:
+Reviewed-by: #### <####>
+Tested-by: #### <####>
+
+Salih
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v4 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+
+On Thu, 14 May 2026 02:21:37 +0100
+#### <####> wrote:
+
+> Hi,
+> 
+> On 5/13/2026 1:31 AM, Guilherme Ivo Bozi wrote:
+> 
+> > v3 -> v4:
+> > - Removed unnecessary 'event < 0' check for type e32  
+> 
+> Thanks for addressing the feedback.
+> Tested on ZCU102 Rev1.0. Driver probes successfully with no errors.
+> 
+> For the series:
+> Reviewed-by: #### <####>
+> Tested-by: #### <####>
+> 
+
+Given I think the 1st patch is a defensive fix rather than one we
+actually expect to ever see (and I don't want to delay the other two),
+I've applied the whole series to the testing branch of iio.git.
+
+Once I've caught up with the review backlog and the bots have finished
+playing with it, I'll push that out as togreg which gets picked up for
+linux-next.
+
+Thanks,
+
+Jonathan
+
+> Salih
+> 
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v3 0/3] iio: adc: xilinx-ams: refactor alarm handling to table-driven design
+
+This series addresses significant code duplication in alarm handling
+logic across the Xilinx AMS IIO driver.
+
+To address this, the series introduces a centralized table-driven
+mapping (alarm_map) that replaces multiple switch statements spread
+across the driver.
+
+This improves:
+- maintainability (single source of truth for mappings)
+- readability (removes repeated switch logic)
+- extensibility (new alarms require only table updates)
+
+No functional changes are intended.
+
+Series overview:
+- Patch 1: fix out-of-bounds channel lookup 
+- Patch 2: convert mutex handling to guard(mutex) 
+- Patch 3: introduce table-driven alarm mapping
+
+v1 -> v2:
+- Fixed Fixes tag format
+- Replaced AMS_ALARM_INVALID with AMS_ALARM_NONE
+- Changed alarm_map base_offset type
+
+v2 -> v3:
+- Replace 'i >= num_channels' with 'i == num_channels'
+- Add missing trailing comma in alarm_map array initializer
+
+Guilherme Ivo Bozi (3):
+  iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event
+    handling
+  iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+  iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+ drivers/iio/adc/xilinx-ams.c | 190 +++++++++++++----------------------
+ 1 file changed, 71 insertions(+), 119 deletions(-)
+
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v3 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event handling
+
+ams_event_to_channel() may return a pointer past the end of
+dev->channels when no matching scan_index is found. This can lead
+to invalid memory access in ams_handle_event().
+
+Add a bounds check in ams_event_to_channel() and return NULL when
+no channel is found. Also guard the caller to safely handle this
+case.
+
+Fixes: d5c70627a794 ("iio: adc: Add Xilinx AMS driver")
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 124470c92529..6191cd1b29a5 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -871,6 +871,9 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		if (dev->channels[i].scan_index == scan_index)
+ 			break;
+ 
++	if (i == dev->num_channels)
++		return NULL;
++
+ 	return &dev->channels[i];
+ }
+ 
+@@ -1012,6 +1015,8 @@ static void ams_handle_event(struct iio_dev *indio_dev, u32 event)
+ 	const struct iio_chan_spec *chan;
+ 
+ 	chan = ams_event_to_channel(indio_dev, event);
++	if (!chan)
++		return;
+ 
+ 	if (chan->type == IIO_TEMP) {
+ 		/*
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v3 2/3] iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+
+Replace open-coded mutex_lock()/mutex_unlock() pairs with
+guard(mutex) to simplify locking and ensure proper unlock on
+all control flow paths.
+
+This removes explicit unlock handling, reduces boilerplate,
+and avoids potential mistakes in error paths while keeping
+the behavior unchanged.
+
+Signed-off-by: #### <####>
+Reviewed-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 24 ++++++++----------------
+ 1 file changed, 8 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 6191cd1b29a5..70a1f97f6dad 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -720,22 +720,20 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	int ret;
+ 
+ 	switch (mask) {
+-	case IIO_CHAN_INFO_RAW:
+-		mutex_lock(&ams->lock);
++	case IIO_CHAN_INFO_RAW: {
++		guard(mutex)(&ams->lock);
+ 		if (chan->scan_index >= AMS_CTRL_SEQ_BASE) {
+ 			ret = ams_read_vcc_reg(ams, chan->address, val);
+ 			if (ret)
+-				goto unlock_mutex;
++				return ret;
+ 			ams_enable_channel_sequence(indio_dev);
+ 		} else if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 			*val = readl(ams->pl_base + chan->address);
+ 		else
+ 			*val = readl(ams->ps_base + chan->address);
+ 
+-		ret = IIO_VAL_INT;
+-unlock_mutex:
+-		mutex_unlock(&ams->lock);
+-		return ret;
++		return IIO_VAL_INT;
++	}
+ 	case IIO_CHAN_INFO_SCALE:
+ 		switch (chan->type) {
+ 		case IIO_VOLTAGE:
+@@ -939,7 +937,7 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	alarm = ams_get_alarm_mask(chan->scan_index);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (state)
+ 		ams->alarm_mask |= alarm;
+@@ -948,8 +946,6 @@ static int ams_write_event_config(struct iio_dev *indio_dev,
+ 
+ 	ams_update_alarm(ams, ams->alarm_mask);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+@@ -962,15 +958,13 @@ static int ams_read_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset = ams_get_alarm_offset(chan->scan_index, dir);
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	if (chan->scan_index >= AMS_PS_SEQ_MAX)
+ 		*val = readl(ams->pl_base + offset);
+ 	else
+ 		*val = readl(ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return IIO_VAL_INT;
+ }
+ 
+@@ -983,7 +977,7 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	struct ams *ams = iio_priv(indio_dev);
+ 	unsigned int offset;
+ 
+-	mutex_lock(&ams->lock);
++	guard(mutex)(&ams->lock);
+ 
+ 	/* Set temperature channel threshold to direct threshold */
+ 	if (chan->type == IIO_TEMP) {
+@@ -1005,8 +999,6 @@ static int ams_write_event_value(struct iio_dev *indio_dev,
+ 	else
+ 		writel(val, ams->ps_base + offset);
+ 
+-	mutex_unlock(&ams->lock);
+-
+ 	return 0;
+ }
+ 
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: [PATCH v3 3/3] iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+
+Replace multiple open-coded switch statements that map between
+scan_index, alarm bits, and register offsets with a centralized
+table-driven approach.
+
+Introduce a struct-based alarm_map to describe the relationship
+between scan indices and alarm offsets, and add a helper to
+translate scan_index to event IDs. This removes duplicated logic
+across ams_get_alarm_offset(), ams_event_to_channel(), and
+ams_get_alarm_mask().
+
+The new approach improves maintainability, reduces code size,
+and makes it easier to extend or modify alarm mappings in the
+future, while preserving existing behavior.
+
+Signed-off-by: #### <####>
+---
+ drivers/iio/adc/xilinx-ams.c | 161 +++++++++++++----------------------
+ 1 file changed, 58 insertions(+), 103 deletions(-)
+
+diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+index 70a1f97f6dad..2ce78883cead 100644
+--- a/drivers/iio/adc/xilinx-ams.c
++++ b/drivers/iio/adc/xilinx-ams.c
+@@ -102,6 +102,7 @@
+ #define AMS_PS_SEQ_MASK			GENMASK(21, 0)
+ #define AMS_PL_SEQ_MASK			GENMASK_ULL(59, 22)
+ 
++#define AMS_ALARM_NONE			0x000 /* not a real offset */
+ #define AMS_ALARM_TEMP			0x140
+ #define AMS_ALARM_SUPPLY1		0x144
+ #define AMS_ALARM_SUPPLY2		0x148
+@@ -763,9 +764,49 @@ static int ams_read_raw(struct iio_dev *indio_dev,
+ 	}
+ }
+ 
++struct ams_alarm_map {
++	enum ams_ps_pl_seq scan_index;
++	unsigned int base_offset;
++};
++
++/*
++ * Array index matches enum ams_alarm_bit.
++ * Entries with base_offset == AMS_ALARM_NONE are unused/invalid
++ * (e.g. RESERVED) and must be skipped.
++ */
++static const struct ams_alarm_map alarm_map[] = {
++	[AMS_ALARM_BIT_TEMP] = { AMS_SEQ_TEMP, AMS_ALARM_TEMP },
++	[AMS_ALARM_BIT_SUPPLY1] = { AMS_SEQ_SUPPLY1, AMS_ALARM_SUPPLY1 },
++	[AMS_ALARM_BIT_SUPPLY2] = { AMS_SEQ_SUPPLY2, AMS_ALARM_SUPPLY2 },
++	[AMS_ALARM_BIT_SUPPLY3] = { AMS_SEQ_SUPPLY3, AMS_ALARM_SUPPLY3 },
++	[AMS_ALARM_BIT_SUPPLY4] = { AMS_SEQ_SUPPLY4, AMS_ALARM_SUPPLY4 },
++	[AMS_ALARM_BIT_SUPPLY5] = { AMS_SEQ_SUPPLY5, AMS_ALARM_SUPPLY5 },
++	[AMS_ALARM_BIT_SUPPLY6] = { AMS_SEQ_SUPPLY6, AMS_ALARM_SUPPLY6 },
++	[AMS_ALARM_BIT_RESERVED] = { 0, AMS_ALARM_NONE },
++	[AMS_ALARM_BIT_SUPPLY7] = { AMS_SEQ_SUPPLY7, AMS_ALARM_SUPPLY7 },
++	[AMS_ALARM_BIT_SUPPLY8] = { AMS_SEQ_SUPPLY8, AMS_ALARM_SUPPLY8 },
++	[AMS_ALARM_BIT_SUPPLY9] = { AMS_SEQ_SUPPLY9, AMS_ALARM_SUPPLY9 },
++	[AMS_ALARM_BIT_SUPPLY10] = { AMS_SEQ_SUPPLY10, AMS_ALARM_SUPPLY10 },
++	[AMS_ALARM_BIT_VCCAMS] = { AMS_SEQ_VCCAMS, AMS_ALARM_VCCAMS },
++	[AMS_ALARM_BIT_TEMP_REMOTE] = { AMS_SEQ_TEMP_REMOTE, AMS_ALARM_TEMP_REMOTE },
++};
++
++static int ams_scan_index_to_event(int scan_index)
++{
++	for (unsigned int i = 0; i < ARRAY_SIZE(alarm_map); i++) {
++		if (alarm_map[i].base_offset == AMS_ALARM_NONE)
++			continue;
++
++		if (alarm_map[i].scan_index == scan_index)
++			return i;
++	}
++
++	return -EINVAL;
++}
++
+ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ {
+-	int offset;
++	int offset, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX)
+ 		scan_index -= AMS_PS_SEQ_MAX;
+@@ -779,36 +820,11 @@ static int ams_get_alarm_offset(int scan_index, enum iio_event_direction dir)
+ 		offset = 0;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return AMS_ALARM_TEMP + offset;
+-	case AMS_SEQ_SUPPLY1:
+-		return AMS_ALARM_SUPPLY1 + offset;
+-	case AMS_SEQ_SUPPLY2:
+-		return AMS_ALARM_SUPPLY2 + offset;
+-	case AMS_SEQ_SUPPLY3:
+-		return AMS_ALARM_SUPPLY3 + offset;
+-	case AMS_SEQ_SUPPLY4:
+-		return AMS_ALARM_SUPPLY4 + offset;
+-	case AMS_SEQ_SUPPLY5:
+-		return AMS_ALARM_SUPPLY5 + offset;
+-	case AMS_SEQ_SUPPLY6:
+-		return AMS_ALARM_SUPPLY6 + offset;
+-	case AMS_SEQ_SUPPLY7:
+-		return AMS_ALARM_SUPPLY7 + offset;
+-	case AMS_SEQ_SUPPLY8:
+-		return AMS_ALARM_SUPPLY8 + offset;
+-	case AMS_SEQ_SUPPLY9:
+-		return AMS_ALARM_SUPPLY9 + offset;
+-	case AMS_SEQ_SUPPLY10:
+-		return AMS_ALARM_SUPPLY10 + offset;
+-	case AMS_SEQ_VCCAMS:
+-		return AMS_ALARM_VCCAMS + offset;
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return AMS_ALARM_TEMP_REMOTE + offset;
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0 || alarm_map[event].base_offset == AMS_ALARM_NONE)
+ 		return 0;
+-	}
++
++	return alarm_map[event].base_offset + offset;
+ }
+ 
+ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+@@ -821,49 +837,13 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 		scan_index = AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (event) {
+-	case AMS_ALARM_BIT_TEMP:
+-		scan_index += AMS_SEQ_TEMP;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY1:
+-		scan_index += AMS_SEQ_SUPPLY1;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY2:
+-		scan_index += AMS_SEQ_SUPPLY2;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY3:
+-		scan_index += AMS_SEQ_SUPPLY3;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY4:
+-		scan_index += AMS_SEQ_SUPPLY4;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY5:
+-		scan_index += AMS_SEQ_SUPPLY5;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY6:
+-		scan_index += AMS_SEQ_SUPPLY6;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY7:
+-		scan_index += AMS_SEQ_SUPPLY7;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY8:
+-		scan_index += AMS_SEQ_SUPPLY8;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY9:
+-		scan_index += AMS_SEQ_SUPPLY9;
+-		break;
+-	case AMS_ALARM_BIT_SUPPLY10:
+-		scan_index += AMS_SEQ_SUPPLY10;
+-		break;
+-	case AMS_ALARM_BIT_VCCAMS:
+-		scan_index += AMS_SEQ_VCCAMS;
+-		break;
+-	case AMS_ALARM_BIT_TEMP_REMOTE:
+-		scan_index += AMS_SEQ_TEMP_REMOTE;
+-		break;
+-	default:
+-		break;
+-	}
++	if (event < 0 || event >= ARRAY_SIZE(alarm_map))
++		return NULL;
++
++	if (alarm_map[event].base_offset == AMS_ALARM_NONE)
++		return NULL;
++
++	scan_index += alarm_map[event].scan_index;
+ 
+ 	for (i = 0; i < dev->num_channels; i++)
+ 		if (dev->channels[i].scan_index == scan_index)
+@@ -877,43 +857,18 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+ 
+ static int ams_get_alarm_mask(int scan_index)
+ {
+-	int bit = 0;
++	int bit = 0, event;
+ 
+ 	if (scan_index >= AMS_PS_SEQ_MAX) {
+ 		bit = AMS_PL_ALARM_START;
+ 		scan_index -= AMS_PS_SEQ_MAX;
+ 	}
+ 
+-	switch (scan_index) {
+-	case AMS_SEQ_TEMP:
+-		return BIT(AMS_ALARM_BIT_TEMP + bit);
+-	case AMS_SEQ_SUPPLY1:
+-		return BIT(AMS_ALARM_BIT_SUPPLY1 + bit);
+-	case AMS_SEQ_SUPPLY2:
+-		return BIT(AMS_ALARM_BIT_SUPPLY2 + bit);
+-	case AMS_SEQ_SUPPLY3:
+-		return BIT(AMS_ALARM_BIT_SUPPLY3 + bit);
+-	case AMS_SEQ_SUPPLY4:
+-		return BIT(AMS_ALARM_BIT_SUPPLY4 + bit);
+-	case AMS_SEQ_SUPPLY5:
+-		return BIT(AMS_ALARM_BIT_SUPPLY5 + bit);
+-	case AMS_SEQ_SUPPLY6:
+-		return BIT(AMS_ALARM_BIT_SUPPLY6 + bit);
+-	case AMS_SEQ_SUPPLY7:
+-		return BIT(AMS_ALARM_BIT_SUPPLY7 + bit);
+-	case AMS_SEQ_SUPPLY8:
+-		return BIT(AMS_ALARM_BIT_SUPPLY8 + bit);
+-	case AMS_SEQ_SUPPLY9:
+-		return BIT(AMS_ALARM_BIT_SUPPLY9 + bit);
+-	case AMS_SEQ_SUPPLY10:
+-		return BIT(AMS_ALARM_BIT_SUPPLY10 + bit);
+-	case AMS_SEQ_VCCAMS:
+-		return BIT(AMS_ALARM_BIT_VCCAMS + bit);
+-	case AMS_SEQ_TEMP_REMOTE:
+-		return BIT(AMS_ALARM_BIT_TEMP_REMOTE + bit);
+-	default:
++	event = ams_scan_index_to_event(scan_index);
++	if (event < 0)
+ 		return 0;
+-	}
++
++	return BIT(event + bit);
+ }
+ 
+ static int ams_read_event_config(struct iio_dev *indio_dev,
+-- 
+2.47.3
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v3 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+
+On Tue, 14 Apr 2026 19:40:32 -0300
+#### <####> wrote:
+
+> This series addresses significant code duplication in alarm handling
+> logic across the Xilinx AMS IIO driver.
+> 
+> To address this, the series introduces a centralized table-driven
+> mapping (alarm_map) that replaces multiple switch statements spread
+> across the driver.
+> 
+> This improves:
+> - maintainability (single source of truth for mappings)
+> - readability (removes repeated switch logic)
+> - extensibility (new alarms require only table updates)
+> 
+> No functional changes are intended.
+This series looks fine to me.
+
+Given the AMD Xilinx folk are fairly active reviewers I'm just
+waiting on them taking a look.
+
+
+> 
+> Series overview:
+> - Patch 1: fix out-of-bounds channel lookup 
+> - Patch 2: convert mutex handling to guard(mutex) 
+> - Patch 3: introduce table-driven alarm mapping
+> 
+> v1 -> v2:
+> - Fixed Fixes tag format
+> - Replaced AMS_ALARM_INVALID with AMS_ALARM_NONE
+> - Changed alarm_map base_offset type
+> 
+> v2 -> v3:
+> - Replace 'i >= num_channels' with 'i == num_channels'
+> - Add missing trailing comma in alarm_map array initializer
+> 
+> Guilherme Ivo Bozi (3):
+>   iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event
+>     handling
+>   iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+>   iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+> 
+>  drivers/iio/adc/xilinx-ams.c | 190 +++++++++++++----------------------
+>  1 file changed, 71 insertions(+), 119 deletions(-)
+> 
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v3 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+
+> This series looks fine to me.
+>
+> Given the AMD Xilinx folk are fairly active reviewers I'm just
+> waiting on them taking a look.
+Hi, just checking in on this series since it=E2=80=99s been some time.
+Any updates from AMD Xilinx review or anything else needed from
+my side?
+
+--
+Thanks,
+Guilherme Ivo
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Subject: Re: [PATCH v3 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+From: #### <####>
+
+Hi Ivo,
+
+On 5/12/26 13:00, Guilherme Ivo Bozi wrote:
+>> This series looks fine to me.
+>>
+>> Given the AMD Xilinx folk are fairly active reviewers I'm just
+>> waiting on them taking a look.
+> Hi, just checking in on this series since it’s been some time.
+> Any updates from AMD Xilinx review or anything else needed from
+> my side?
+
+Checking internally who can test this. Please give me some time.
+
+Thanks,
+Michal
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: "Erim, Salih" <Salih.Erim@amd.com>
+Subject: RE: [PATCH v3 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+
+SGkgR3VpbGhlcm1lLA0KDQo+IA0KPiA+IFRoaXMgc2VyaWVzIGxvb2tzIGZpbmUgdG8gbWUuDQo+
+ID4NCj4gPiBHaXZlbiB0aGUgQU1EIFhpbGlueCBmb2xrIGFyZSBmYWlybHkgYWN0aXZlIHJldmll
+d2VycyBJJ20ganVzdCB3YWl0aW5nDQo+ID4gb24gdGhlbSB0YWtpbmcgYSBsb29rLg0KPiBIaSwg
+anVzdCBjaGVja2luZyBpbiBvbiB0aGlzIHNlcmllcyBzaW5jZSBpdOKAmXMgYmVlbiBzb21lIHRp
+bWUuDQo+IEFueSB1cGRhdGVzIGZyb20gQU1EIFhpbGlueCByZXZpZXcgb3IgYW55dGhpbmcgZWxz
+ZSBuZWVkZWQgZnJvbSBteSBzaWRlPw0KDQpObywgbm90IG5lZWRlZCwgSSBhbSByZXZpZXdpbmcg
+YW5kIHdpbGwgdGVzdCBpdC4NCg0KPiANCj4gLS0NCj4gVGhhbmtzLA0KPiBHdWlsaGVybWUgSXZv
+DQoNClNhbGloLg0K
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Subject: Re: [PATCH v3 0/3] iio: adc: xilinx-ams: refactor alarm handling to
+From: #### <####>
+
+Hi Guilherme,
+
+Thanks for working on this. The refactoring approach looks good overall,
+but all three patches have indentation issues and patch 3 has one
+semantic issue. Please see my comments on each patch.
+
+On 4/14/2026 11:40 PM, Guilherme Ivo Bozi wrote:
+> This series addresses significant code duplication in alarm handling
+> logic across the Xilinx AMS IIO driver.
+> 
+> To address this, the series introduces a centralized table-driven
+> mapping (alarm_map) that replaces multiple switch statements spread
+> across the driver.
+> 
+> This improves:
+> - maintainability (single source of truth for mappings)
+> - readability (removes repeated switch logic)
+> - extensibility (new alarms require only table updates)
+> 
+> No functional changes are intended.
+> 
+> Series overview:
+> - Patch 1: fix out-of-bounds channel lookup
+> - Patch 2: convert mutex handling to guard(mutex)
+> - Patch 3: introduce table-driven alarm mapping
+> 
+> v1 -> v2:
+> - Fixed Fixes tag format
+> - Replaced AMS_ALARM_INVALID with AMS_ALARM_NONE
+> - Changed alarm_map base_offset type
+> 
+> v2 -> v3:
+> - Replace 'i >= num_channels' with 'i == num_channels'
+> - Add missing trailing comma in alarm_map array initializer
+> 
+> Guilherme Ivo Bozi (3):
+>    iio: adc: xilinx-ams: fix out-of-bounds channel lookup in event
+>      handling
+>    iio: adc: xilinx-ams: use guard(mutex) for automatic locking
+>    iio: adc: xilinx-ams: refactor alarm mapping to table-driven approach
+> 
+>   drivers/iio/adc/xilinx-ams.c | 190 +++++++++++++----------------------
+>   1 file changed, 71 insertions(+), 119 deletions(-)
+> 
+> --
+> 2.47.3
+> 
+
+Salih
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Subject: Re: [PATCH v3 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel
+From: #### <####>
+
+Hi Guilherme,
+
+Replies are inline.
+
+On 4/14/2026 11:40 PM, Guilherme Ivo Bozi wrote:
+> ams_event_to_channel() may return a pointer past the end of
+> dev->channels when no matching scan_index is found. This can lead
+> to invalid memory access in ams_handle_event().
+> 
+> Add a bounds check in ams_event_to_channel() and return NULL when
+> no channel is found. Also guard the caller to safely handle this
+> case.
+> 
+> Fixes: d5c70627a794 ("iio: adc: Add Xilinx AMS driver")
+> Signed-off-by: #### <####>
+> ---
+>   drivers/iio/adc/xilinx-ams.c | 5 +++++
+>   1 file changed, 5 insertions(+)
+> 
+> diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.c
+> index 124470c92529..6191cd1b29a5 100644
+> --- a/drivers/iio/adc/xilinx-ams.c
+> +++ b/drivers/iio/adc/xilinx-ams.c
+> @@ -871,6 +871,9 @@ static const struct iio_chan_spec *ams_event_to_channel(struct iio_dev *dev,
+>                  if (dev->channels[i].scan_index == scan_index)
+>                          break;
+> 
+> +       if (i == dev->num_channels)
+> +               return NULL;
+> +
+The added lines use spaces for indentation instead of tabs.
+
+Salih
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Subject: Re: [PATCH v3 2/3] iio: adc: xilinx-ams: use guard(mutex) for
+From: #### <####>
+
+Hi,
+
+On 4/14/2026 11:40 PM, Guilherme Ivo Bozi wrote:
+> Replace open-coded mutex_lock()/mutex_unlock() pairs with
+> guard(mutex) to simplify locking and ensure proper unlock on
+> all control flow paths.
+> 
+> This removes explicit unlock handling, reduces boilerplate,
+> and avoids potential mistakes in error paths while keeping
+> the behavior unchanged.
+> 
+> Signed-off-by: #### <####>
+> Reviewed-by: #### <####>
+> ---
+>   drivers/iio/adc/xilinx-ams.c | 24 ++++++++----------------
+>   1 file changed, 8 insertions(+), 16 deletions(-)
+
+Same indentation issue -- spaces instead of tabs on all new lines.
+
+Salih
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Subject: Re: [PATCH v3 3/3] iio: adc: xilinx-ams: refactor alarm mapping to
+From: #### <####>
+
+Hi,
+
+On 4/14/2026 11:40 PM, Guilherme Ivo Bozi wrote:
+> Replace multiple open-coded switch statements that map between
+> scan_index, alarm bits, and register offsets with a centralized
+> table-driven approach.
+> 
+> Introduce a struct-based alarm_map to describe the relationship
+> between scan indices and alarm offsets, and add a helper to
+> translate scan_index to event IDs. This removes duplicated logic
+> across ams_get_alarm_offset(), ams_event_to_channel(), and
+> ams_get_alarm_mask().
+> 
+> The new approach improves maintainability, reduces code size,
+> and makes it easier to extend or modify alarm mappings in the
+> future, while preserving existing behavior.
+> 
+> Signed-off-by: #### <####>
+> ---
+>   drivers/iio/adc/xilinx-ams.c | 161 +++++++++++++----------------------
+>   1 file changed, 58 insertions(+), 103 deletions(-)
+
+Two issues:
+
+1) Same tabs-vs-spaces indentation problem as patches 1 and 2.
+
+2) In ams_event_to_channel():
+
+> +       if (event < 0 || event >= ARRAY_SIZE(alarm_map))
+> +               return NULL;
+
+The 'event' parameter is u32, so 'event < 0' is always false.
+Either drop the < 0 check or change the parameter type to int
+if you intend to handle negative values.
+
+Salih
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v3 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel
+
+Hi Salih,
+
+Replies are inline.
+
+On Tue, May 12, 2026 at 11:22=E2=80=#### <####> wr=
+ote:
+>
+> Hi Guilherme,
+>
+> Replies are inline.
+>
+> On 4/14/2026 11:40 PM, Guilherme Ivo Bozi wrote:
+> > ams_event_to_channel() may return a pointer past the end of
+> > dev->channels when no matching scan_index is found. This can lead
+> > to invalid memory access in ams_handle_event().
+> >
+> > Add a bounds check in ams_event_to_channel() and return NULL when
+> > no channel is found. Also guard the caller to safely handle this
+> > case.
+> >
+> > Fixes: d5c70627a794 ("iio: adc: Add Xilinx AMS driver")
+> > Signed-off-by: #### <####>
+> > ---
+> >   drivers/iio/adc/xilinx-ams.c | 5 +++++
+> >   1 file changed, 5 insertions(+)
+> >
+> > diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-ams.=
+c
+> > index 124470c92529..6191cd1b29a5 100644
+> > --- a/drivers/iio/adc/xilinx-ams.c
+> > +++ b/drivers/iio/adc/xilinx-ams.c
+> > @@ -871,6 +871,9 @@ static const struct iio_chan_spec *ams_event_to_cha=
+nnel(struct iio_dev *dev,
+> >                  if (dev->channels[i].scan_index =3D=3D scan_index)
+> >                          break;
+> >
+> > +       if (i =3D=3D dev->num_channels)
+> > +               return NULL;
+> > +
+> The added lines use spaces for indentation instead of tabs.
+I checked both locally and the raw mbox from lore.kernel.org, and the
+indentation uses TAB characters consistently (^I in the diff).
+
+To verify, I inspected the relevant hunk using cat -A:
+
+^I^Iif (dev->channels[i].scan_index =3D=3D scan_index)
+^I^I^Ibreak;
+
++^Iif (i =3D=3D dev->num_channels)
++^I^Ireturn NULL;
+
+^Ireturn &dev->channels[i];
+
+I could not observe any indentation issues locally or from the raw mbox.
+
+>
+> Salih
+>
+
+--
+Guilherme Ivo
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v3 3/3] iio: adc: xilinx-ams: refactor alarm mapping to
+
+Hi Salih,
+
+On Tue, May 12, 2026 at 11:34=E2=80=#### <####> wr=
+ote:
+>
+> Hi,
+>
+> On 4/14/2026 11:40 PM, Guilherme Ivo Bozi wrote:
+> > Replace multiple open-coded switch statements that map between
+> > scan_index, alarm bits, and register offsets with a centralized
+> > table-driven approach.
+> >
+> > Introduce a struct-based alarm_map to describe the relationship
+> > between scan indices and alarm offsets, and add a helper to
+> > translate scan_index to event IDs. This removes duplicated logic
+> > across ams_get_alarm_offset(), ams_event_to_channel(), and
+> > ams_get_alarm_mask().
+> >
+> > The new approach improves maintainability, reduces code size,
+> > and makes it easier to extend or modify alarm mappings in the
+> > future, while preserving existing behavior.
+> >
+> > Signed-off-by: #### <####>
+> > ---
+> >   drivers/iio/adc/xilinx-ams.c | 161 +++++++++++++---------------------=
+-
+> >   1 file changed, 58 insertions(+), 103 deletions(-)
+>
+> Two issues:
+>
+> 1) Same tabs-vs-spaces indentation problem as patches 1 and 2.
+>
+> 2) In ams_event_to_channel():
+>
+> > +       if (event < 0 || event >=3D ARRAY_SIZE(alarm_map))
+> > +               return NULL;
+>
+> The 'event' parameter is u32, so 'event < 0' is always false.
+> Either drop the < 0 check or change the parameter type to int
+> if you intend to handle negative values.
+You are correct regarding the u32 type -- the event < 0 check is
+unnecessary. I will remove it in the next revision.
+
+>
+> Salih
+
+--
+Guilherme Ivo
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+From: #### <####>
+Subject: Re: [PATCH v3 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel
+
+On Tue, 12 May 2026 12:40:05 -0300
+#### <####> wrote:
+
+> Hi Salih,
+>=20
+> Replies are inline.
+>=20
+> On Tue, May 12, 2026 at 11:22=E2=80=#### <####> =
+wrote:
+> >
+> > Hi Guilherme,
+> >
+> > Replies are inline.
+> >
+> > On 4/14/2026 11:40 PM, Guilherme Ivo Bozi wrote: =20
+> > > ams_event_to_channel() may return a pointer past the end of
+> > > dev->channels when no matching scan_index is found. This can lead
+> > > to invalid memory access in ams_handle_event().
+> > >
+> > > Add a bounds check in ams_event_to_channel() and return NULL when
+> > > no channel is found. Also guard the caller to safely handle this
+> > > case.
+> > >
+> > > Fixes: d5c70627a794 ("iio: adc: Add Xilinx AMS driver")
+> > > Signed-off-by: #### <####>
+> > > ---
+> > >   drivers/iio/adc/xilinx-ams.c | 5 +++++
+> > >   1 file changed, 5 insertions(+)
+> > >
+> > > diff --git a/drivers/iio/adc/xilinx-ams.c b/drivers/iio/adc/xilinx-am=
+s.c
+> > > index 124470c92529..6191cd1b29a5 100644
+> > > --- a/drivers/iio/adc/xilinx-ams.c
+> > > +++ b/drivers/iio/adc/xilinx-ams.c
+> > > @@ -871,6 +871,9 @@ static const struct iio_chan_spec *ams_event_to_c=
+hannel(struct iio_dev *dev,
+> > >                  if (dev->channels[i].scan_index =3D=3D scan_index)
+> > >                          break;
+> > >
+> > > +       if (i =3D=3D dev->num_channels)
+> > > +               return NULL;
+> > > + =20
+> > The added lines use spaces for indentation instead of tabs. =20
+> I checked both locally and the raw mbox from lore.kernel.org, and the
+> indentation uses TAB characters consistently (^I in the diff).
+>=20
+> To verify, I inspected the relevant hunk using cat -A:
+>=20
+> ^I^Iif (dev->channels[i].scan_index =3D=3D scan_index)
+> ^I^I^Ibreak;
+>=20
+> +^Iif (i =3D=3D dev->num_channels)
+> +^I^Ireturn NULL;
+>=20
+> ^Ireturn &dev->channels[i];
+>=20
+> I could not observe any indentation issues locally or from the raw mbox.
+FWIW they look good to me as well. Salih, I'd guess you have a local issue.
+b4 (on git.kernel.org) is really handy for ensuring none of those occur!
+
+Jonathan
+
+>=20
+> >
+> > Salih
+> > =20
+>=20
+> --
+> Guilherme Ivo
+
+
+From mboxrd@z Thu Jan  1 00:00:00 1970
+Subject: Re: [PATCH v3 1/3] iio: adc: xilinx-ams: fix out-of-bounds channel
+From: #### <####>
+
+Hi Jonathan,
+>> I could not observe any indentation issues locally or from the raw mbox.
+> FWIW they look good to me as well. Salih, I'd guess you have a local issue.
+> b4 (on git.kernel.org) is really handy for ensuring none of those occur!
+
+You are right, apologies for the noise. The tabs were converted to
+spaces by my email client during export. I will use b4 for patch
+retrieval going forward.
+
+There is still the u32 dead code issue in patch 3/3
+(event < 0 check on a u32 parameter in ams_event_to_channel()),
+Guilherme has acknowledged.
+
+I am currently testing the series on ZCU102 hardware. Will follow up
+with my Reviewed-by and Tested-by tags on the v4.
+
+Salih
+
+> 
+> Jonathan
+> 
+>>
+>>>
+>>> Salih
+>>>
+>>
+>> --
+>> Guilherme Ivo
+> 
+
+
