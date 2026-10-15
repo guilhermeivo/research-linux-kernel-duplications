@@ -1,0 +1,32 @@
+Estudo e mitigação de duplicações em projetos FLOSS utilizando a ferramenta ArKanjo
+
+A aplicação da ferramenta ArKanjo em projetos FLOSS, como o Git, QEMU e PostgreSQL, pode revelar problemas que dificilmente aparecem apenas com testes controlados. Entre esses problemas estão casos específicos de código que não são tratados corretamente, falsos positivos e negativos, falhas de análise, crashes e problemas de desempenho.  Este projeto tem como objetivo utilizar esses projetos reais para avaliar a ArKanjo em situações mais próximas das encontradas no uso cotidiano, identificar problemas e contribuir para o aprimoramento da ferramenta. Ao mesmo tempo, os resultados da análise serão utilizados para identificar oportunidades de refatoração nos projetos avaliados. 
+
+Os principais objetivos são: 
+* Executar a ArKanjo em projetos FLOSS e identificar duplicações em nível de função;
+* Investigar e documentar falsos positivos, falsos negativos, crashes e falhas de parsing encontrados durante as execuções;
+* Abrir issues com os problemas identificados e, quando possível, desenvolver e testar correções para a própria ArKanjo;
+* Gerar e analisar visualizações e relatórios de duplicação para facilitar a análise dos resultados e a seleção de casos para refatoração.
+* Propor e, quando possível, submeter patches de refatoração aos projetos analisados;
+* Acompanhar o processo de revisão das contribuições e registrar as experiências obtidas durante a interação com as comunidades dos projetos
+
+https://github.com/arkanjo-tool/arkanjo/discussions
+
+>>> Cronograma - Agosto
+
+* Seleção dos projetos FLOSS que serão analisados e configuração dos ambientes de teste: 8h
+* Primeira execução da ArKanjo nos projetos selecionados e levantamento inicial de falhas, crashes e erros de parsing: 7h
+
+>>> Cronograma - Setembro
+
+* Investigação dos falsos positivos, falsos negativos e falhas de execução encontrados durante os testes nos projetos reais: 15h
+* Abertura de issues para registrar os problemas encontrados, desenvolvimento de correções na ArKanjo e apoio na criação de visualizações e relatórios para facilitar a análise.: 15h
+
+>>> Cronograma - Outubro
+
+* Execução da versão aprimorada da ArKanjo nos projetos selecionados e análise dos resultados de duplicação: 15h
+* Seleção de casos de duplicação, desenvolvimento e testes locais de refatorações e submissão de patches aos projetos analisados: 20h
+
+>>> Cronograma - Novembro
+
+* Acompanhamento das issues e dos patches enviados aos projetos, incluindo revisões e eventuais ajustes solicitados pelas comunidades: 20h
