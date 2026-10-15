@@ -1,0 +1,28 @@
+MAC0215 - Atividade Curricular em Pesquisa
+==========================================
+
+Course: https://uspdigital.usp.br/jupiterweb/obterDisciplina?nomdis=&sgldis=mac0215
+
+Experiments
+-----------
+
+The experiments in this directory use the following repositories:
+
+* Tree-sitter: https://github.com/tree-sitter/tree-sitter
+* Tree-sitter C: https://github.com/tree-sitter/tree-sitter-c
+* Linux: https://github.com/torvalds/linux
+
+Tree-sitter and its C grammar are used to parse and analyze C source code. The
+Linux repository provides the kernel source code used by the experimental
+scripts.
+
+Directory Structure
+-------------------
+
+The repositories must be placed in the following directory structure for the
+scripts to work correctly:
+
+experiments/
+├── tree-sitter/
+├── tree-sitter-c/
+└── linux/

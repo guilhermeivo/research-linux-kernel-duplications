@@ -1,0 +1,109 @@
+\newlength{\sep}
+\setlength{\sep}{4mm}
+
+\newlength{\innersep}
+\setlength{\innersep}{2mm}
+
+\newlength{\boxwidth}
+\setlength{\boxwidth}{3cm}
+
+\newcommand{\medbullet}{\mathbin{\vcenter{\hbox{\scalebox{0.5}{$\bullet$}}}}}
+
+\begin{tikzpicture}[
+box/.style={
+    draw,
+    rectangle,
+    align=center,
+    inner sep=\innersep,
+    node distance=\sep,
+    font=\small,
+}
+]
+
+\node[box] (tmp) {
+\begin{minipage}{\boxwidth}
+Temporary Codebase
+\end{minipage}
+};
+\node[box, right=of tmp] (db) {
+\begin{minipage}{\boxwidth}
+Code Duplication DB
+\end{minipage}
+};
+
+\node[
+    box, below=of tmp,
+    minimum height=1.8cm,
+    fill=blue!30
+] (parser) {%
+\begin{minipage}{\boxwidth}
+Function Parser
+
+$\medbullet$ Tree-sitter
+\end{minipage}
+};
+
+\node[
+    box, right=of parser,
+    minimum height=1.8cm,
+    fill=orange!60
+] (dup) {%
+\begin{minipage}{\boxwidth}
+Duplication Finder
+
+$\medbullet$ TF-IDF + Cosine\\
+$\medbullet$ Line Diff
+\end{minipage}
+};
+
+\node[
+    fit=(tmp)(db)(parser)(dup),
+] (innerboxpreprocessor) {};
+
+\newlength{\boxwidthinput}
+\setlength{\boxwidthinput}{2\boxwidth}
+\addtolength{\boxwidthinput}{2\sep}
+\addtolength{\boxwidthinput}{4\innersep}
+
+\node[box, below=of innerboxpreprocessor, minimum width=\boxwidthinput] (input) {Input Codebase};
+
+\node[
+    draw,
+    fit=(tmp)(db)(parser)(dup)(input),
+    label={[xshift=2\innersep]above left:Preprocessor},
+    dashed,
+    inner sep=\innersep
+] (boxpreprocessor) {};
+
+\node[
+    box,
+    above=of boxpreprocessor,
+    yshift=1mm,
+    fill=green!90!black
+] (qo) {
+\begin{minipage}{\boxwidth}
+\begin{center}
+Query Output
+\end{center}
+\end{minipage}
+};
+\node[box, above=of qo] (qr) {
+\begin{minipage}{\boxwidth}
+\begin{center}
+Query Responder
+\end{center}
+\end{minipage}
+};
+
+\draw[->] (qr.south) -- (qo.north);
+
+\draw[->] ($(parser.south |- input.north)$) -- (parser.south);
+\draw[->] ($(dup.south |- input.north)$) -- (dup.south);
+
+\draw[->] (parser.north) -- (tmp.south);
+\draw[->] (tmp.east) -- ++(\innersep,0) |- (dup.west);
+\draw[->] (dup.north) -- (db.south);
+
+\draw[->] (boxpreprocessor.north) -- (qo.south);
+
+\end{tikzpicture}

@@ -1,0 +1,40 @@
+>>> Cronograma - Março
+
+Foco: acompanhamento do submetido patch 
+
+https://lore.kernel.org/lkml/CAJgF-xs=3fbKQO5Mj=coPMXq0ecWmV0bJDNFN44coEHV3WS=wg@mail.gmail.com/T/#u
+
+e aprofundamento da análise de duplicações
+
+* Acompanhamento do patch submetido (análise de feedback e eventuais respostas da comunidade) - 6h
+* Nova execução da ferramenta ArKanjo em subsistemas selecionados do kernel - 10h
+* Análise das duplicações detectadas - 10h
+* Estudo de como realizar a refatoração aos casos identificados - 6h
+
+>>> Cronograma - Abril
+
+Foco: seleção de casos e desenvolvimento de refatorações
+
+* Seleção de casos relevantes de duplicação - 10h
+* Implementação inicial de refatorações nos casos selecionados - 12h
+* Compilação e testes locais do kernel para validação das alterações - 8h
+* Preparação técnica de novos patches - 5h
+* Documentação metodológica do processo - 5h
+
+>>> Cronograma - Maio
+
+Foco: submissão de contribuições e interação com a comunidade
+
+* Finalização e revisão de patches - 10h
+* Submissão de novos patches - 5h
+* Interação com mantenedores (respostas e esclarecimentos técnicos) - 10h
+* Ajustes decorrentes de revisões solicitadas - 8h
+* Registro e análise das interações - 7h
+
+>>> Cronograma - Junho
+
+Foco: consolidação dos resultados e sistematização científica
+
+* Acompanhamento das revisões pendentes - 6h
+* Ajustes finais e eventual reenvio de patches - 8h
+* Sistematização das evidências coletadas (feedback, aceitação ou rejeição) - 10h

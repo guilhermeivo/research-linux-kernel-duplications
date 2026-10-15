@@ -1,0 +1,563 @@
+\documentclass[twocolumn]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+
+\usepackage{microtype}
+
+\usepackage{hyperref}
+\usepackage{multibib}
+\usepackage{booktabs}
+\usepackage{tabularx}
+
+\hypersetup{hidelinks}
+
+\usepackage{float}
+
+\newcites{patches}{Referências de Patches}
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,calc,fit,arrows.meta}
+\tikzset{>=latex}
+
+\setlength{\columnsep}{20pt}
+
+\usepackage{listings}
+
+\lstdefinestyle{macrocode}{
+    backgroundcolor  = \color{white},
+    rulesepcolor     = \color{darkgray},
+    commentstyle     = \color{gray},
+    keywordstyle     = \color{blue}\bfseries,
+    stringstyle      = \color{purple},
+    basicstyle       = \ttfamily\footnotesize,
+    showspaces       = false,
+    showstringspaces = false,
+    numbers          = left,
+    tabsize          = 1,
+    numberstyle      = \scriptsize,
+    frame            = shadowbox,
+    breaklines       = true,
+    captionpos       = b,
+}
+
+\renewcommand{\lstlistingname}{Código}
+\renewcommand{\lstlistlistingname}{Lista de Códigos}
+
+\usepackage{caption}
+\usepackage{subcaption}
+
+\usepackage{todonotes}
+\setuptodonotes{inline}
+
+\title{Estudo de Duplicações em Subsistemas do Kernel Linux: Análise, Refatoração e Contribuições\thanks{Trabalho realizado com apoio da FAPESP (Projeto Futuros Cientistas).}}
+
+\author{Guilherme Ivo Bozi\thanks{Bolsista de Iniciação Científica (IC).} \\
+\small{Supervisor: Prof.\ Dr.\ Paulo Meirelles} \\
+\small{MAC0215 -- Atividade Curricular em Pesquisa (2026)} \\
+\small{Instituto de Matemática, Estatística e Ciência da Computação (IME)} \\
+\small{Universidade de São Paulo (USP)}}
+
+\date{\today}
+
+\def\kernelauthor{42.412}
+\def\kernelfile{64.077}
+\def\kernelloc{28.130.130}
+
+\begin{document}
+
+\onecolumn
+
+\maketitle
+\begin{abstract}
+
+\noindent Este trabalho investiga a duplicação de código no \textbf{kernel Linux} para identificar oportunidades de refatoração. \cite{Alves2013, Corbet2017}. A ferramenta \texttt{ArKanjo} \cite{arcanjo2025arkanjo} foi aprimorada com a integração do parser \textbf{\texttt{Tree-sitter}} e o uso de \textbf{\textit{embeddings} de funções} na detecção de clones semânticos complexos nos benchmarks \textbf{\texttt{BigCloneBench}} \cite{svajlenko2014bigclonebench} e \textbf{\texttt{POJ-104}} \cite{mou2016convolutional}. Através de uma abordagem etnográfica baseada em \textbf{observação participante} \cite{Seaman2008, Robson2016, Wen2021}, foram submetidos \textbf{17 patches} aos subsistemas AMDGPU e IIO, dos quais 8 foram aceitos e na remoção líquida de \textbf{1.096 linhas de código}. As interações com mantenedores revelaram que a aplicação do princípio \textbf{DRY} no kernel é altamente contextual \cite{duplicationdry}, priorizando frequentemente o isolamento de hardware e a legibilidade em detrimento da deduplicação \cite{Wang2011, arcanjotese}. O estudo mostra que o \texttt{ArKanjo} auxilia na identificação de duplicações relevantes e na redução de débito técnico e serve como uma eficaz \textbf{porta de entrada para novos colaboradores} na comunidade.
+
+\vspace{0.5cm}
+\noindent\textbf{Palavras-chave:} kernel Linux, Duplicação de Código, \texttt{ArKanjo}, Refatoração, Engenharia de Software.
+
+\end{abstract}
+
+
+
+\onecolumn
+\newpage
+
+\tableofcontents
+
+\newpage
+\twocolumn
+
+\section{Introdução}
+
+A manutenção de sistemas computacionais de larga escala impõe desafios crescentes à engenharia de software. O \textbf{kernel Linux}, com \kernelauthor~contribuidores e \kernelloc~linhas de código\footnote{\texttt{Linux 7.2-rc2}}\footnote{O número de linhas de código foi obtido utilizando a ferramenta \texttt{cloc}, considerando arquivos com extensão \texttt{.c}, \texttt{.h} e \texttt{.rs}. O número de contribuidores foi obtido a partir do histórico \texttt{git} utilizando o comando \texttt{git shortlog -sne --all}.}, base para a maioria dos servidores da internet, supercomputadores e sistemas operacionais modernos\cite{Corbet2017}, representa um ecossistema fundamental para a infraestrutura digital e para o avanço da ciência de dados. Este projeto visa investigar a ocorrência de \textbf{código duplicado} no código fonte do kernel Linux, com foco na identificação, análise e proposta de refatorações que melhorem sua manutenibilidade\cite{Alves2013}. A identificação dos códigos duplicados será conduzida por meio da ferramenta \texttt{ArKanjo}\cite{arcanjo2025arkanjo}, desenvolvida para detectar duplicações em nível de função, e utilizará uma abordagem qualitativa baseada em \textbf{observação participante}\cite{Seaman2008,Robson2016,Wen2021}. Como resultado, espera-se produzir contribuições práticas submetidas à comunidade do kernel Linux, bem como gerar evidências científicas sobre os processos de revisão das duplicações de código identificadas e a aceitação desses tipos de contribuições, a partir da sistematização das experiências e interações realizadas durante o projeto.
+
+\section{Objetivos}
+
+O objetivo central deste projeto é contribuir para a melhoria da qualidade do código do kernel Linux, identificando e mitigando duplicações de código em subsistemas selecionados. Como objetivos específicos:
+
+\begin{itemize}
+    \item Detectar duplicações em nível de função com o uso da ferramenta \texttt{ArKanjo};
+
+    \item Analisar e selecionar duplicações para aplicar técnicas de refatoração, priorizando critérios de manutenibilidade;
+
+    \item Propor e submeter \textit{patches} (contribuições) com refatorações para a comunidade do kernel Linux;
+
+    \item Documentar o processo e as interações com a comunidade por meio de observação participante;
+
+    \item Sistematizar as lições aprendidas e refletir sobre os aspectos socio-técnicos do processo de contribuição ao kernel Linux.
+\end{itemize}
+
+\section{Materiais e Métodos}
+
+\subsection{Arquitetura do \texttt{\bfseries ArKanjo}}
+
+\begin{figure}[ht]
+    \centering
+    \input{figures/architecture}%
+    \caption{Diagrama de arquitetura com os componentes da ferramenta}
+    \label{fig:architecture-arkanjo}
+\end{figure}
+
+O \texttt{ArKanjo} tem um arquitetura de dois estágios (Figura~\ref{fig:architecture-arkanjo}) para mitigar o elevado custo computacional em bases de códigos extensas, como mais de 28 milhões de linhas de código do kernel Linux:
+
+\begin{itemize}
+    \item \textbf{Preprocessor}: executado uma única vez por base de código transformando o código-fonte em uma representação intermediária onde cada função é isolada gerando três arquivos para cada unidade: o \textit{Header file} (contendo a assinatura), o \textit{Source file} (com o corpo da função) e o \textit{Info file} (metadados como caminho relativo e linhas de início e fim), ilustrado o seu pipeline completo na Figura~\ref{fig:pipeline-arkanjo}.
+
+    \item \textbf{Query Responder}: componente de interface que consome os artefatos gerados, permitindo que o desenvolvedor execute consultas rápidas -- filtros, buscas e análises -- sem reprocessar o código.
+\end{itemize}
+
+\begin{figure*}[ht]
+    \centering
+    \input{figures/pipeline}%
+    \caption{Pipeline de pré-processamento do \texttt{ArKanjo}, desde a extração da função até a geração de similaridades entre métodos.}
+    \label{fig:pipeline-arkanjo}
+\end{figure*}
+
+O estágio de \textbf{Preprocessor} é baseado em métodos, o primeiro método utiliza TF-IDF (\textit{Term Frequency-Inverse Document Frequency}) para gerar representações vetoriais do código-fonte. A similaridade entre funções é calculada por meio da \textbf{similaridade de cosseno}, utilizando a biblioteca \texttt{Gensim}.
+
+\subsubsection{Evoluções implementadas neste projeto}
+
+Neste trabalho, o \texttt{ArKanjo} foi estendido com novas funcionalidades e melhorias arquiteturais, incluindo:
+
+\begin{itemize}
+    \item Migração para \texttt{Tree-sitter}, substituindo o parser manual anteriormente utilizado de C e Java. Essa  mudança possibilitou o suporte a múltiplas linguagens de forma mais robusta e escalável, facilita a expansão para linguagens, como Rust, cada vez mais presente no kernel Linux.
+
+    \item Aprimoramento do pipeline de análise, com a integração de técnicas de linearização de Árvores Sintáticas Abstratas (AST), viabilizada pela adoção do \texttt{Tree-sitter} como mecanismo de \textit{parsing}.
+
+    \item Desenvolvimento de um método independente por um grupo de estudantes da USP na segunda fase da disciplina MAC0470/5856 (2026), com foco na detecção de clones de código dos Type-3 e Type-4, caracterizados por variações estruturais mais complexas e alterações semânticas.
+
+    A abordagem utiliza um detector baseado em \textit{embeddings} de funções, no qual cada corpo de função é representado por vetores gerados por modelos de \textit{embeddings} disponibilizados via \texttt{Hugging Face}, utilizando por padrão o modelo \texttt{jinaai/jina-embeddings-v2-base-code}. A similaridade entre funções é calculada por meio da similaridade de cosseno entre os vetores. Esse método permite identificar similaridade semântica mesmo em casos de variações de nomes, formatação ou estrutura do código.
+
+    \item Melhoria na extensibilidade do sistema de comandos e subcomandos do \texttt{ArKanjo}, com a introdução de uma estrutura mais modular para definição de novos métodos e interfaces de consulta. Essa refatoração simplifica a adição de novas funcionalidades, incluindo a definição de argumentos e validações associadas, reduzindo o esforço necessário para contribuições externas e facilitando a evolução colaborativa da ferramenta.
+
+    \item Suporte a saídas estruturadas e customizáveis, atendendo ao \textit{feedback} de usuários sobre a dificuldade de processar a saída colorida do terminal em arquivos~\cite{arcanjotese}, a interface foi aprimorada com suporte aos formatos JSON e ao uso de \textit{templates}. Essa melhoria permite a extração de dados específicos de forma estruturada, eliminando caracteres de formatação indesejados e facilitando a integração do \texttt{ArKanjo} com fluxos de automação e scripts externos
+\end{itemize}
+
+Como demonstração da flexibilidade permitida por essas evoluções, o comando abaixo ilustra a busca por funções duplicadas em um subsistema específico, definindo um limite de similaridade e utilizando um template para gerar uma saída limpa e estruturada, pronta para integração em outros scripts:
+
+\begin{minipage}{0.9\columnwidth}
+    \centering
+\begin{lstlisting}[style=macrocode,numbers=none,language=bash,morekeywords={arkanjo},caption={Exploração de funções duplicadas usando um \textit{threshold} de similaridade, filtros e uma saída customizada}]
+arkanjo explorer --sort --pattern "disable_reg" --similarity 90 --template "{func_a} em {filename_a} eh similar a {func_b}"
+\end{lstlisting}
+\end{minipage}
+
+\subsection{Taxonomia de Clones de Código}
+
+Os clones de código são categorizados em quatro níveis principais \cite{svajlenko2014bigclonebench}, baseados no nível de similaridade sintática e semântica entre dois códigos:
+
+\begin{itemize}
+    \item \texttt{Type-1} (T1): Representa cópias idênticas, onde as únicas diferenças são em comentários, espaços em branco e outros elementos irrelevantes para a execução.
+    \item \texttt{Type-2} (T2): Inclui as variações do \texttt{Type-1}, mas permite a renomeação de variáveis e tipos, além da adição ou deleção de trechos de código redundantes.
+    \item \texttt{Type-3} (T3): Adiciona às variações do \texttt{Type-2} a reordenação de blocos de código e de instruções dentro desses blocos.
+    \item \texttt{Type-4} (T4): Refere a clones semânticos, onde dois trechos de código realizam a mesma computação, mas possuem implementações textuais e estruturais completamente distintas
+\end{itemize}
+
+\section{Metodologia Científica}
+
+\subsection{Estudo Etnográfico}
+
+A viabilidade técnica e social do \texttt{ArKanjo} foi avaliada através de um estudo etnográfica e multimétodo, conduzido em duas fases complementares, realizadas em 2025 e replicada em 2026:
+
+\begin{enumerate}
+    \item \textbf{Observação Participante}: submissão de patches para mitigar duplicações reais e interagindo com os maintainers, documentando as interações com os mantenedores.
+
+    \item \textbf{Estudo com participantes}: grupos de estudantes da USP na disciplina MAC0470/5856 (2026), atuando como contribuidores, utilizaram os resultados do \texttt{ArKanjo} para identificar e refatorar duplicações nos subsistemas Industrial I/O (IIO) e AMD Display, com duplicação com similaridades de 100\% e 90\%.
+\end{enumerate}
+
+Drivers de dispositivo constituem uma parcela significativa do código-fonte do kernel, o que motiva a escolha de subsistemas amplamente utilizados nesse ecossistema, com foco em AMD Display e Industrial Input/Output (IIO).
+
+O subsistema AMDGPU DRM foi selecionado por sua arquitetura em múltiplas camadas, na qual camadas superiores são mais genéricas e camadas inferiores consistem em drivers específicos de hardware que implementam funcionalidades comuns entre diferentes dispositivos\cite{Wang2011}. Já o subsistema Industrial Input/Output (IIO) foi escolhido por ser considerado um ponto de entrada mais acessível para novos colaboradores, fornecendo suporte a dispositivos como conversores analógico-digital e digital-analógico, além de apresentar uma estrutura adequada para atividades de análise e refatoração em larga escala.
+
+\subsection{Avaliação por Benchmarks}
+
+A avaliação dos métodos de detecção de clones foi realizada por meio de um novo comando no \texttt{ArKanjo}, permitindo selecionar tanto os métodos quanto o conjunto de dados (\textit{dataset}) utilizado, como o exemplo:
+
+\begin{minipage}{0.9\columnwidth}
+    \centering
+\begin{lstlisting}[style=macrocode,numbers=none,language=bash,morekeywords={arkanjo},caption={\textit{Benchmark} para avaliação dos métodos de detecção de clones utilizando uma base de dados definida.}]
+arkanjo benchmark --methods="1,2,3,4" --dataset="bigclonebench"
+\end{lstlisting}
+\end{minipage}
+
+A implementação da ferramenta utiliza adaptadores específicos para cada \textit{benchmark}, permitindo que diferentes conjuntos de dados sejam avaliados. Foram implementados adaptadores para os conjuntos de dados \texttt{BigCloneBench} e \texttt{POJ-104}.
+
+A Figura~\ref{fig:benchmark} apresenta o fluxo utilizado para avaliação dos métodos de detecção de clones, desde a execução dos métodos até o cálculo das métricas.
+
+\begin{figure}[ht]
+    \centering
+    \input{figures/benchmark}%
+    \caption{Fluxo do processo de avaliação dos métodos de detecção de clones utilizando adaptadores específicos para cada \textit{benchmark} e cálculo das métricas de desempenho}
+    \label{fig:benchmark}
+\end{figure}
+
+A avaliação consiste em executar os métodos de detecção nos arquivos do conjunto de dados e comparar os pares identificados como clones com o conjunto de pares rotulados pelo \textit{benchmark}. Como os métodos podem detectar pares que não estão anotados no \textit{benchmark}, apenas os pares que possuem rótulo conhecido são considerados no cálculo das métricas de avaliação. Assim, evita classificar como erro um par que não existe uma classificação definida.
+
+No caso do \texttt{BigCloneBench} \cite{svajlenko2014bigclonebench}, foi necessário realizar um tratamento adicional dos dados. O \texttt{BigCloneEval} \cite{svajlenko2016bigcloneeval} utiliza um banco de dados \texttt{H2} contendo apenas os pares de clones anotados no \texttt{IJaDataset} \cite{ijadataset}. Porém, durante a execução dos métodos, todos os arquivos do conjunto de dados são comparados entre si, produzindo também pares que não estão rotulados. Esses pares não podem ser considerados automaticamente como não clones, pois a ausência de anotação não representa uma classificação negativa conhecida \cite{krinke2022bigclonebench}. Por isso, eles são desconsiderados durante a avaliação e não são utilizados no cálculo de métricas como \textit{precision}.
+
+No entanto, a versão do \texttt{BigCloneBench} disponibilizada pelo \texttt{CodeXGLUE} \cite{codexglue}, através do \texttt{Hugging Face}, contém exemplos rotulados tanto como clones quanto como não clones, permitindo determinar corretamente a classe binária de cada par. Entretanto, essa versão não informa a classificação dos clones por tipos (\texttt{Type-1}, \texttt{Type-2}, \texttt{Very Strong Type-3}, \texttt{Strong Type-3}, \texttt{Moderate Type-3} e \texttt{Type-4}) e apresenta mais que 0.01\% dos arquivos da versão original (Tabela~\ref{tab:locs}).
+
+A classificação por tipos de clones é importante pois diferentes métodos de detecção podem apresentar desempenhos distintos dependendo do nível de similaridade presente nos pares avaliados.
+
+Para manter ambas as características, foi realizada a junção das duas bases de dados. As informações do \texttt{BigCloneEval} foi utilizado para obter a classificação dos pares de clones por tipo, enquanto o conjunto de testes do \texttt{CodeXGLUE} foi utilizado para identificar corretamente se cada par corresponde a um clone ou a um não clone. Essa combinação permitiu realizar avaliações binárias sem perder a distinção entre os diferentes tipos de clones.
+
+O conjunto de dados de testes \texttt{POJ-104} \cite{mou2016convolutional}, também disponibilizado pelo \texttt{CodeXGLUE} \cite{codexglue}, não possui uma classificação por tipos. Entretanto, por ser composto por soluções de problemas de competições de programação implementadas de maneiras distintas, esse \textit{benchmark} contém predominantemente clones semânticos e estruturais.
+
+\begin{table}[ht!]
+\centering
+\begin{tabular}{l l c c c}
+\toprule
+\textbf{Scope} & \textbf{Lang} & \textbf{Files} & \textbf{Code} \\
+\midrule
+\texttt{bcb-reduced} & Java & 47.885 & 10.083.815 \\
+\texttt{bcb-codexglue} & Java & 860 & 26.203 \\
+\texttt{poj104}\footnotemark & C++ & 12.000 & 378.030 \\
+kernel Linux & C, Rust & \kernelfile & \kernelloc \\
+\bottomrule
+\end{tabular}
+\caption{Comparação entre o número de arquivos e linhas de código dos datasets utilizados nos \textit{benchmarks} para o conjunto de testes e do kernel Linux.}
+\label{tab:locs}
+\end{table}
+
+\footnotetext{Devido ao tamanho da base de dados, o \textit{benchmark} foi executado apenas sobre um subconjunto selecionado aleatoriamente.}
+
+Ao final da execução são calculadas as métricas de \textit{precision}, \textit{recall}, \textit{accuracy} e \textit{F1-score} utilizando apenas os pares com rótulos conhecidos. Essa critério garante que os resultados sejam obtidos somente sobre dados para os quais existe uma referência confiável, evitando penalizações causadas pela ausência de anotações nos conjuntos de dados.
+
+\section{Resultados}
+
+\subsection{Resultados no kernel Linux}
+
+A aplicação do \texttt{ArKanjo} no kernel Linux resultou na identificação de duplicações em diferentes subsistemas, com subsequente geração de propostas de refatoração.
+
+A Tabela~\ref{tab:kernel-results} reúne as submissões realizadas.
+
+\def\AMD{AMD}
+\def\IIO{IIO}
+
+\begin{table}[ht!]
+\centering
+\begin{tabular*}{\columnwidth}{l l c l c c}
+\toprule
+\textbf{Ref} & \textbf{SS} & \textbf{SML} & \textbf{Status} & \textbf{Diff} \\
+\midrule
+\citepatches{gid1}  & \AMD & 100\% & Revisão & \texttt{+12/-61}  \\
+\citepatches{gid2}  & \AMD & 100\% & Aplicado & \texttt{+13/-42}  \\
+\citepatches{gid3}  & \AMD & 100\% & Recusado & \texttt{+61/-94}  \\
+\citepatches{gid4}  & \AMD & 100\% & Aplicado & \texttt{+56/-102}  \\
+\citepatches{gid5}  & \IIO & 100\% & Aplicado & \texttt{+29/-95} \\
+\citepatches{gid6}  & \IIO & 100\% & Aplicado & \texttt{+42/-88} \\
+\citepatches{gid7}  & \AMD & 100\% & Recusado & \texttt{+131/-190}  \\
+\citepatches{gid8}  & \AMD & 100\% & Revisão & \texttt{+42/-75}  \\
+\citepatches{gid9}  & \AMD & 100\% & Revisão & \texttt{+44/-52}  \\
+\citepatches{gid10} & \AMD & 90\%  & Recusado & \texttt{+47/-124}  \\
+\citepatches{gid11} & \IIO & 90\%  & Recusado & \texttt{+63/-62}  \\
+\citepatches{gid12} & \IIO & 90\%  & Revisão & \texttt{+42/-60}  \\
+
+\citepatches{author1} & \AMD   & 100\%  & Recusado & \texttt{+86/-114}  \\
+\citepatches{author2} & \IIO & 100\%  & Aplicado & \texttt{+15/-32}  \\
+\citepatches{author3} & \IIO & 100\%  & Aplicado & \texttt{+71/-119}\\
+\citepatches{author4} & \AMD & 90\%  & Aplicado & \texttt{+1274/-2035} \\
+
+\citepatches{gabriel1} & \AMD & 100\%  & Aplicado & \texttt{+41/-124} \\
+\bottomrule
+\end{tabular*}
+\caption{Submissões de \textit{patches} no kernel Linux}
+% \todo{verificar se os patches em revisao ja mudaram o status}
+\label{tab:kernel-results}
+\end{table}
+
+Foram submetidos 17 \textit{patches}, dos quais 8 foram aceitos, 4 permanecem em revisão e 5 foram rejeitados. Os \textit{patches} aceitos resultaram em modificações de \texttt{+1.541/-2.637}, correspondendo a uma remoção líquida de 1.096 linhas de código e a uma média de \texttt{+192/-329} linhas alteradas por contribuição. Já os \textit{patches} rejeitados totalizaram modificações de \texttt{+388/-584}, equivalentes à remoção líquida de 196 linhas de código, com média de \texttt{+78/-117} linhas por \textit{patch}.
+
+Esses resultados demonstram que as contribuições aceitas produziram um impacto significativo na redução de código duplicado, sem indicar que o tamanho das alterações tenha sido um fator determinante para sua aceitação, provando ser um excelente caminho de entrada para novos contribuidores, permitindo que iniciantes naveguem pelas complexas trocas (\textit{trade-offs}) entre estabilidade, performance e design no kernel.
+
+
+\subsection{Resultados em \textit{benchmarks}}
+
+A avaliação do \texttt{ArKanjo} foi realizada por meio da comparação entre três métodos de detecção de clones: Similaridade por NLP (\texttt{Gensim}), AST Linearizada (\texttt{Tree-sitter}) e Embeddings (Code LM). Os experimentos foram realizados utilizando duas bases de dados: o \texttt{BigCloneBench} e o \texttt{POJ-104}.
+
+\subsubsection{Análise de Clones Sintáticos (\texttt{BigCloneBench})}
+
+Os resultados obtidos no \textit{benchmark} \texttt{BigCloneBench} mostram que os todos métodos alcançam desempenho ideal para clones dos tipos \texttt{Type-1} e \texttt{Type-2}, mantendo valores de \textit{recall} próximos de $1.0$ para limiar de 90\% de similaridade (Figura~\ref{fig:bigclonebench-radar}).
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/spider_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/spider\_chart\_title.tex}
+    \label{fig:bigclonebench-radar}
+\end{figure}
+
+Entretanto, para clones mais complexos, as diferenças entre os métodos tornam evidentes, para clones \texttt{Type-3} e \texttt{Type-4}, os métodos baseados em Embeddings e em AST Linearizada mantêm desempenho superior ao método baseado em NLP (\texttt{Gensim}).
+
+No método baseado em NLP, observa uma redução do \textit{F1-Score} conforme o limiar de similaridade aumenta, indicando menor capacidade para identificar clones que apresentam modificações estruturais mais expressivas. O método baseado em Embeddings apresenta o melhor desempenho geral (Figura~\ref{fig:bigclonebench-Aggregate-line-chart}), atingindo seu maior \textit{F1-Score} em limiares próximos de 35\%. Além de alcançar o melhor resultado agregado, essa abordagem mantém desempenho consistente mesmo em cenários com maior variação lexical e estrutural entre os códigos comparados.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/f1_score_Aggregate_line_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/f1\_score\_Aggregate\_line\_chart\_title.tex}
+    \label{fig:bigclonebench-Aggregate-line-chart}
+\end{figure}
+
+A análise individual por tipo sintático (Figura~\ref{fig:bigclonebench-recall}) mostra o comportamento de cada método. Para os clones dos tipos \texttt{Type-1} e \texttt{Type-2}, tanto o método baseado em Embeddings quanto a AST Linearizada mantêm um \textit{recall} igual ou próximo de $1.0$ ao longo de praticamente todo o intervalo de limiares.
+
+Nos clones de \texttt{Type-3}, mesmo ocorrendo uma redução do desempenho conforme o limiar aumenta, ambas os métodos continuam apresentando resultados superiores ao método baseado em NLP. Já nos clones \texttt{Type-4}, observa uma limitação dos métodos baseados em características textuais ou sintáticas. Enquanto o método de Embeddings ainda consegue preservar desempenho em limiares intermediários, os métodos de NLP e AST Linearizada apresentam uma degradação mais acentuada.
+
+\begin{figure*}[p]
+    \centering
+\vspace{-1cm}
+\begin{subfigure}{0.45\textwidth}
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/recall_Type-1_line_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/recall\_Type-1\_line\_chart\_title.tex}
+    \label{fig:bigclonebench-1}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/recall_Type-2_line_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/recall\_Type-2\_line\_chart\_title.tex}
+    \label{fig:bigclonebench-2}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/recall_Very Strong Type-3_line_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/recall\_Very Strong Type-3\_line\_chart\_title.tex}
+    \label{fig:bigclonebench-3-1}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/recall_Strong Type-3_line_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/recall\_Strong Type-3\_line\_chart\_title.tex}
+    \label{fig:bigclonebench-3-2}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/recall_Moderate Type-3_line_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/recall\_Moderate Type-3\_line\_chart\_title.tex}
+    \label{fig:bigclonebench-3-3}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/recall_Type-4_line_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/recall\_Type-4\_line\_chart\_title.tex}
+    \label{fig:bigclonebench-4}
+\end{subfigure}
+
+\caption{\textit{Recall} dos métodos em relação ao limiar de similaridade no BigCloneBench}
+\label{fig:bigclonebench-recall}
+
+\end{figure*}
+
+\subsubsection{Análise de Clones Semânticos (\texttt{POJ-104})}
+
+Diferentemente do \texttt{BigCloneBench}, a base \texttt{POJ-104} é composta por diferentes soluções para um mesmo problema de programação, tornando a similaridade semântica mais relevante do que a semelhança textual.
+
+O método baseado em Embeddings obtém o melhor desempenho geral, atingindo o maior \textit{F1-Score} (Figura~\ref{fig:poj104-Aggregate-line-chart}). Entretanto, o método baseado em NLP (\texttt{Gensim}) apresenta uma redução mais acentuada do desempenho à medida que o limiar aumenta.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/poj104/f1_score_Aggregate_line_chart.pdf}
+    \input{scripts/benchmarks/poj104/f1\_score\_Aggregate\_line\_chart\_title.tex}
+    \label{fig:poj104-Aggregate-line-chart}
+\end{figure}
+
+\subsubsection{Análise do custo computacional}
+
+Além da qualidade da detecção, também foi avaliado o custo computacional das diferentes abordagens. Embora o método baseado em Embeddings apresente os melhores resultados na identificação de clones complexos, esse ganho vem acompanhado de um tempo de processamento maior (Figura~\ref{fig:bigclonebench-tradeoff}).
+
+% Na base \texttt{POJ-104}, o método de Embeddings levou aproximadamente \textbf{536 s} para concluir a execução, enquanto a abordagem baseada em AST Linearizada completou o processamento em \textbf{271 s}. E na base \texttt{BigCloneBench}, a AST Linearizada executou em apenas \textbf{12 s}, e o método de Embeddings usou {\textbf{148 s}}.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/trade_off.pdf}
+    \input{scripts/benchmarks/bigclonebench/trade\_off.tex}
+    \label{fig:bigclonebench-tradeoff}
+\end{figure}
+
+\subsubsection{Análise das curvas Precision--Recall}
+
+No \texttt{BigCloneBench} (Figura~\ref{fig:bigclonebench-precision-recall}), observa-se que o método baseado em Embeddings mantém níveis elevados de precisão, superiores a $0.8$, mesmo quando o \textit{recall} atinge valores intermediários. Em comparação, o método baseado em NLP perde precisão à medida que aumenta a limiar dos clones, mostrando maior capacidade à geração de falsos positivos.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1.0\columnwidth]{scripts/benchmarks/bigclonebench/pr_chart.pdf}
+    \input{scripts/benchmarks/bigclonebench/pr\_chart\_title.tex}
+    \label{fig:bigclonebench-precision-recall}
+\end{figure}
+
+% \clearpage
+
+\section{Discussão}
+
+Os resultados obtidos mostram que a redução de duplicações no kernel Linux não depende apenas da capacidade de identificar trechos de código semelhantes. Na prática, trata-se de um problema que envolve aspectos técnicos, custo computacional e, principalmente, as práticas de desenvolvimento adotadas pelos mantenedores de cada subsistema do kernel.
+
+\subsection{Eficácia dos Métodos e Benchmarks}
+
+Os experimentos realizados com os conjuntos de dados \texttt{BigCloneBench} e \texttt{POJ-104} demonstram as diferenças entre tempo de execução e capacidade de identificar clones.
+
+A abordagem baseada em NLP, utilizando o Gensim, apresentou baixo tempo de execução (12,75 s no \texttt{BigCloneBench}), sendo adequada para identificar clones dos tipos \texttt{Type-1} e \texttt{Type-2}, nos quais as diferenças entre os trechos de código são predominantemente sintáticas.
+
+Por outro lado, a utilização de AST Linearizada (Tree-sitter) e Embeddings (Code LM) ampliou a capacidade de detectar clones complexos (\texttt{Type-3} e \texttt{Type-4}). Esse ganho de precisão, entretanto, vem acompanhado de um custo computacional significativamente maior (148s).
+
+Esses resultados reforçam a escolha da arquitetura em dois estágios adotada pelo \texttt{ArKanjo}, na qual o processamento mais custoso é realizado durante o pré-processamento, preservando consultas rápidas durante a utilização da ferramenta.
+
+\subsection{Influência da Arquitetura dos Subsistemas}
+
+A organização de cada subsistema influencia diretamente o potencial de aplicação das refatorações. O subsistema AMDGPU apresenta uma estrutura mais hierárquica, com funcionalidades compartilhadas concentradas em componentes centrais. Essa característica favorece a identificação de padrões comuns, mas também exige maior cuidado para preservar as diferenças entre gerações de hardware.
+
+O subsistema IIO, por sua vez, possui uma organização mais distribuída, composta por diversos drivers voltados para dispositivos específicos. Esse modelo facilita a participação de novos colaboradores, pois as alterações normalmente permanecem restritas a um conjunto reduzido de arquivos. Porém, as duplicações encontradas tendem a ser mais específicas de cada driver, reduzindo as oportunidades de generalização sem comprometer interfaces particulares.
+
+\subsection{Análise das Interações nos Patches}
+
+As discussões com os mantenedores, incluindo Alex Deucher e Christian König, durante a revisão dos patches forneceram uma compreensão mais clara dos critérios utilizados para avaliar propostas de deduplicação.
+
+\begin{itemize}
+    \item \textbf{Separação entre gerações de hardware.} Diversas propostas foram rejeitadas (\citepatches{gid7}, \citepatches{gid9} e \citepatches{gid10}) porque a duplicação no kernel é frequentemente intencional. A manutenção de implementações independentes para diferentes gerações de hardware, como \texttt{GMC v10} e \texttt{GMC v11}, reduz o risco de que modificações em dispositivos mais recentes provoquem regressões em plataformas consolidadas. Nesse contexto, o isolamento entre implementações é priorizado em relação ao princípio DRY.
+
+    \item \textbf{Preferência por soluções simples.} O patch \citepatches{gid1}, relacionado ao \texttt{JPEG v5.0}, mostrou que os mantenedores preferem soluções que introduzam o menor impacto possível na estrutura do código. Em vez de criar novos arquivos compartilhados, a recomendação aceita foi tornar a função original não-estática e chamá-la diretamente no outro arquivo.
+
+    \item \textbf{Legibilidade acima da abstração.} Discussões mostraram que "esconder valores em macros" ou criar camadas de abstração excessivas é desencorajado. No caso do \citepatches{gid10}, o mantenedor explicitou que um switch simples é preferível a uma tabela de busca abstrata por ser mais legível. O patch \citepatches{gid4}, relacionado ao mecanismo de \textit{ring preempt}, foi aceito por tratar apenas de lógica de software, de modo que a centralização em \verb|amdgpu_gfx.c| não comprometia as particularidades de cada plataforma.
+\end{itemize}
+
+\section{Conclusão}
+
+Este trabalho investigou a duplicação de código no kernel Linux e utilizou esse estudo para aprimorar o \texttt{ArKanjo} e gerar contribuições práticas para o projeto. Ao longo da pesquisa, foram submetidos 16 \textit{patches}, dos quais parte foi aceita pela comunidade, resultando na remoção líquida de 1.096 linhas de código duplicado.
+
+A integração de modelos de \textit{embeddings} e do parser Tree-sitter ao \texttt{ArKanjo} ampliou sua capacidade de identificar duplicações. A ferramenta permitiu que estudantes explorassem uma base de código extensa e complexa, identificassem oportunidades de refatoração e participassem ativamente do desenvolvimento do kernel Linux. Esses resultados indicam que o \texttt{ArKanjo} pode contribuir para reduzir a barreira de entrada de novos contribuidores.
+
+O aprimoramento do \texttt{ArKanjo} também ocorreu de forma colaborativa: Natalia S. André e Gabriel Almeida participaram ativamente do aprimoramento da ferramenta, contribuindo para a implementação de novas funcionalidades e para a identificação e refatoração de clones de código nos subsistemas IIO e AMDGPU. Além dos resultados técnicos, a iniciativa fortaleceu as atividades do grupo \textit{CoDev}, que busca promover pesquisas colaborativas e interdisciplinares de engenharia de software em projetos de software livre.
+
+Este trabalho também evidencia que a aplicação do princípio DRY (\textit{Don't Repeat Yourself}) no kernel Linux depende da análise do contexto. Embora a duplicação acidental represente um débito técnico que deve ser reduzido, existem situações em que a duplicação é uma decisão de projeto consciente, adotada para preservar o isolamento entre arquiteturas de hardware, facilitar a manutenção ou atender requisitos de desempenho.
+
+\cleardoublepage
+
+\bibliographystyle{abnt}
+\bibliography{references}
+
+\bibliographystylepatches{abnt}
+\bibliographypatches{references}
+
+\onecolumn
+
+\appendix
+
+\section{Grafos das Duplicações}
+
+As Figuras~\ref{fig:graph1} e~\ref{fig:graph2} apresentam grafos das duplicações identificadas nos subsistemas analisados do kernel Linux. Observa a formação de agrupamentos de funções conectadas por trechos de código duplicados, permitindo identificar conjuntos de funções com elevado grau de similaridade e potenciais oportunidades de refatoração. Parte desses agrupamentos foi eliminada após a aplicação dos \textit{patches} apresentados na Tabela~\ref{tab:kernel-results}.
+
+\def\topdup{250}
+\def\minweight{15}
+\def\sim{90}
+
+\begin{figure}[h]
+    \centering
+
+\begin{subfigure}{1.0\textwidth}
+    \centering
+    \includegraphics[width=1.0\textwidth]{scripts/graphs/plots/gpu_dup_graph.pdf}%
+    \caption{\texttt{drivers/gpu} (AMD)}
+    \label{fig:graph1}
+\end{subfigure}
+
+\end{figure}
+
+\begin{figure}[p]
+    \ContinuedFloat
+    \centering
+
+\begin{subfigure}{1.0\textwidth}
+    \centering
+    \includegraphics[width=1.0\textwidth]{scripts/graphs/plots/iio_dup_graph.pdf}%
+    \caption{\texttt{drivers/iio} (IIO)}
+    \label{fig:graph2}
+\end{subfigure}
+
+\caption{Grafos de duplicação onde nós representam funções; arestas agregam linhas duplicadas ($\geq$ \minweight), exibindo as \topdup~conexões mais relevantes usando uma limiar de similaridade de \sim\%.}
+
+\end{figure}
+
+\newpage
+
+\section{Histórico de Atividades}
+
+A tabela a seguir apresenta a distribuição das 100 horas de atividades consideradas para fins de integralização da disciplina. Ressalta-se que o desenvolvimento do projeto continuou após o cumprimento dessa carga horária, incluindo a evolução da ferramenta \texttt{ArKanjo} e atividades de manutenção e revisão de contribuições.
+
+A distribuição apresentada foi reconstruída a partir do histórico de desenvolvimento do projeto, utilizando como fontes o histórico de \textit{commits} e \textit{pull requests} do repositório \texttt{git}\footnote{\url{https://github.com/arkanjo-tool/arkanjo}}, os registros de submissão e revisão de patches disponíveis no Lore do kernel Linux~\citepatches{author1,author2,author3,author4} e as anotações de acompanhamento das atividades realizadas ao longo da disciplina.
+
+\begin{table}[ht]
+\centering
+\begin{tabularx}{\columnwidth}{l X c}
+\toprule
+\textbf{Período} & \textbf{Atividade desenvolvida} & \textbf{Horas} \\
+\midrule
+
+Março &
+Acompanhamento das discussões do primeiro patch submetido ao kernel Linux, análise das duplicações encontradas utilizando a ferramenta \texttt{ArKanjo} e início da evolução da ferramenta, incluindo melhorias na infraestrutura, sistema de compilação e organização do código. &
+14 \\
+
+Março &
+Execução da ferramenta \texttt{ArKanjo} em diferentes subsistemas do kernel Linux, análise dos resultados obtidos e estudo de possíveis oportunidades de refatoração para redução de duplicações de código. &
+8 \\
+
+Abril &
+Seleção de casos de duplicação para refatoração, implementação e validação das alterações no kernel Linux, submissão de novos patches. &
+14 \\
+
+Abril &
+Desenvolvimento de novas funcionalidades no \texttt{ArKanjo}, com destaque para a integração do Tree-sitter e melhorias no parser. &
+14 \\
+
+Maio &
+Acompanhamento das revisões dos patches submetidos, interação com mantenedores do kernel Linux e realização dos ajustes solicitados durante o processo de revisão. &
+12 \\
+
+Maio &
+Implementação de novos métodos de detecção de duplicação baseados em representações estruturais do código. &
+10 \\
+
+Junho &
+Desenvolvimento de funcionalidades voltadas à análise de duplicações, otimizações de desempenho e melhorias na visualização dos resultados da ferramenta \texttt{ArKanjo}. &
+12 \\
+
+Junho &
+Consolidação dos resultados obtidos durante as submissões ao kernel Linux, acompanhamento das revisões pendentes e sistematização das evidências produzidas ao longo do projeto. &
+6 \\
+
+Junho--Julho &
+Evolução da arquitetura do \texttt{ArKanjo} com suporte ao desenvolvimento da infraestrutura de benchmarks utilizando o \texttt{BigCloneBench}, documentação das novas funcionalidades. &
+10 \\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\twocolumn
+
+\end{document}

@@ -1,0 +1,33 @@
+\begin{tikzpicture}[
+box/.style={
+    draw,
+    rectangle,
+    align=center,
+    inner sep=2mm,
+    node distance=4mm,
+    minimum height=.8cm,
+    font=\small,
+},
+method/.style={
+    draw=black,
+    fill=orange!60,
+    rounded corners=3pt,
+    inner sep=2mm,
+    minimum height=.8cm,
+    align=center
+}
+]
+
+\node[method] (method) {Method};
+
+\node[box, right=of method] (adapter) {Adapter};
+
+\node[box, right=of adapter] (benchmark) {Benchmark};
+
+\node[box, right=of benchmark] (metrics) {Metrics};
+
+\draw[->] (method) -- (adapter);
+\draw[->] (adapter) -- (benchmark);
+\draw[->] (benchmark) -- (metrics);
+
+\end{tikzpicture}
