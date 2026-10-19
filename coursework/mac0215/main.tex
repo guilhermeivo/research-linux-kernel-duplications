@@ -53,7 +53,7 @@
 \usepackage{todonotes}
 \setuptodonotes{inline}
 
-\title{Estudo de Duplicações em Subsistemas do Kernel Linux: Análise, Refatoração e Contribuições\thanks{Trabalho realizado com apoio da FAPESP (Projeto Futuros Cientistas).}}
+\title{Estudo de Duplicações em Subsistemas do Kernel Linux: Análise, Refatoração e Contribuições\thanks{O presente trabalho foi realizado com apoio da Fundação de Amparo à Pesquisa do Estado de São Paulo (FAPESP), Brasil. Processo nº 2025/22416-1}}
 
 \author{Guilherme Ivo Bozi\thanks{Bolsista de Iniciação Científica (IC).} \\
 \small{Supervisor: Prof.\ Dr.\ Paulo Meirelles} \\
@@ -292,7 +292,7 @@ A Tabela~\ref{tab:kernel-results} reúne as submissões realizadas.
 
 Foram submetidos 17 \textit{patches}, dos quais 8 foram aceitos, 4 permanecem em revisão e 5 foram rejeitados. Os \textit{patches} aceitos resultaram em modificações de \texttt{+1.541/-2.637}, correspondendo a uma remoção líquida de 1.096 linhas de código e a uma média de \texttt{+192/-329} linhas alteradas por contribuição. Já os \textit{patches} rejeitados totalizaram modificações de \texttt{+388/-584}, equivalentes à remoção líquida de 196 linhas de código, com média de \texttt{+78/-117} linhas por \textit{patch}.
 
-Esses resultados demonstram que as contribuições aceitas produziram um impacto significativo na redução de código duplicado, sem indicar que o tamanho das alterações tenha sido um fator determinante para sua aceitação, provando ser um excelente caminho de entrada para novos contribuidores, permitindo que iniciantes naveguem pelas complexas trocas (\textit{trade-offs}) entre estabilidade, performance e design no kernel.
+Esses resultados demonstram que as contribuições aceitas produziram um impacto significativo na redução de código duplicado, sem indicar que o tamanho das alterações tenha sido um fator determinante para sua aceitação, provando ser um caminho de entrada para novos contribuidores, permitindo que iniciantes naveguem pelas complexas trocas (\textit{trade-offs}) entre estabilidade, performance e design no kernel.
 
 
 \subsection{Resultados em \textit{benchmarks}}
@@ -448,7 +448,7 @@ As discussões com os mantenedores, incluindo Alex Deucher e Christian König, d
 
 \section{Conclusão}
 
-Este trabalho investigou a duplicação de código no kernel Linux e utilizou esse estudo para aprimorar o \texttt{ArKanjo} e gerar contribuições práticas para o projeto. Ao longo da pesquisa, foram submetidos 16 \textit{patches}, dos quais parte foi aceita pela comunidade, resultando na remoção líquida de 1.096 linhas de código duplicado.
+Este trabalho investigou a duplicação de código no kernel Linux e utilizou esse estudo para aprimorar o \texttt{ArKanjo} e gerar contribuições práticas para o projeto. Ao longo da pesquisa, foram submetidos 17 \textit{patches}, dos quais parte foi aceita pela comunidade, resultando na remoção líquida de 1.096 linhas de código duplicado.
 
 A integração de modelos de \textit{embeddings} e do parser Tree-sitter ao \texttt{ArKanjo} ampliou sua capacidade de identificar duplicações. A ferramenta permitiu que estudantes explorassem uma base de código extensa e complexa, identificassem oportunidades de refatoração e participassem ativamente do desenvolvimento do kernel Linux. Esses resultados indicam que o \texttt{ArKanjo} pode contribuir para reduzir a barreira de entrada de novos contribuidores.
 
@@ -509,7 +509,7 @@ As Figuras~\ref{fig:graph1} e~\ref{fig:graph2} apresentam grafos das duplicaçõ
 
 A tabela a seguir apresenta a distribuição das 100 horas de atividades consideradas para fins de integralização da disciplina. Ressalta-se que o desenvolvimento do projeto continuou após o cumprimento dessa carga horária, incluindo a evolução da ferramenta \texttt{ArKanjo} e atividades de manutenção e revisão de contribuições.
 
-A distribuição apresentada foi reconstruída a partir do histórico de desenvolvimento do projeto, utilizando como fontes o histórico de \textit{commits} e \textit{pull requests} do repositório \texttt{git}\footnote{\url{https://github.com/arkanjo-tool/arkanjo}}, os registros de submissão e revisão de patches disponíveis no Lore do kernel Linux~\citepatches{author1,author2,author3,author4} e as anotações de acompanhamento das atividades realizadas ao longo da disciplina.
+A distribuição apresentada foi reconstruída a partir do histórico de desenvolvimento do projeto, utilizando como fontes o histórico de \textit{commits} e \textit{pull requests} do repositório \texttt{git}\footnote{\url{https://gitlab.com/ccsl-usp/codev/arkanjo-tool}}, os registros de submissão e revisão de patches disponíveis no Lore do kernel Linux~\citepatches{author1,author2,author3,author4} e as anotações de acompanhamento das atividades realizadas ao longo da disciplina.
 
 \begin{table}[ht]
 \centering
