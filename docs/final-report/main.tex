@@ -117,7 +117,7 @@ O objetivo central deste projeto é contribuir para a melhoria da qualidade do c
 
 \section{Metodologia}\label{sec:metodologia}
 
-Este projeto dá continuidade a estudos conduzidos pelo grupo de pesquisa entre 2024 e 2025~\cite{arcanjo2025arkanjo,duplicationdry}, anterior à vigência da bolsa, que utilizou o \texttt{ArKanjo}~\cite{arcanjo2025arkanjo} para avaliar a viabilidade técnica e social da refatoração de duplicações no kernel Linux. Em 2026, os procedimentos foram replicados com novos participantes. A abordagem é um estudo multimétodo de caráter etnográfico, que combina detecção automatizada de duplicações, observação participante~\cite{Seaman2008,Robson2016,Wen2021} e um estudo com participantes.
+Este projeto dá continuidade a estudos conduzidos pelo grupo de pesquisa entre 2024 e 2025~\cite{arcanjo2025arkanjo,duplicationdry}, anterior à vigência da bolsa, que utilizou o \texttt{ArKanjo}~\cite{arcanjo2025arkanjo} para avaliar a viabilidade técnica e social da refatoração de duplicações no kernel Linux. Em 2026, os procedimentos foram replicados com novos participantes. A abordagem é um estudo multimétodo de caráter etnográfico, que combina detecção automatizada de duplicações, observação participante~\cite{Seaman2008,Robson2016,Wen2021} e um estudo com novos contribuidores (estudantes) do kernel Linux.
 
 \subsection{Subsistemas estudados}
 
@@ -143,13 +143,23 @@ O estudo foi organizado em três etapas:
 
 \subsection{Coleta de dados}
 
-Por meio de \textbf{observação participante}, os autores interagiram com a comunidade e submeteram \textit{patches} para contribuir com os subsistemas analisados. Além disso, conduziram um \textbf{estudo com participantes} envolvendo grupos de alunos da disciplina MAC0470/5856 -- Desenvolvimento de Software Livre (USP, 2026/1)\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=MAC0470}}. Os alunos atuaram como contribuidores, utilizando os resultados de detecção de duplicações de código da ferramenta \texttt{ArKanjo} para identificar, refatorar e submeter contribuições.
+Por meio de \textbf{observação participante}, o bolsista com a comunidade e submeteram \textit{patches} para contribuir com os subsistemas analisados. Além disso, conduziram um \textbf{estudo com participantes} envolvendo grupos de alunos da disciplina MAC0470/5856 -- Desenvolvimento de Software Livre (USP, 2026/1)\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=MAC0470}}. Os alunos atuaram como contribuidores, utilizando os resultados de detecção de duplicações de código da ferramenta \texttt{ArKanjo} para identificar, refatorar e submeter contribuições.
+
+%TODO: 40 de graduacao; 16 de pos; 56 total; citar que é graduacao e pos
 
 \section{Atividades realizadas e resultados}
 
+%TODO:
+% 3.2. Visualizacao
+%3.3 Refatoração: patches e interação com a comunidade
+%(observacao participante )
+%3.4. Mentoria e análise do patches do estudantes
+%(observacao participante as observer)
+%citar o CI
+
 \subsection{Análise: detecção e seleção de duplicações}\label{sec:deteccao}
 
-A detecção com o \texttt{ArKanjo}, com similaridade de 90\% e 100\%, onde cada duplicação foi avaliada manualmente quanto ao potencial de refatoração. A Figura~\ref{fig:treemap} mostra os subsistemas de drivers de gpu e o iio no kernel, e a Figura~\ref{fig:mac0214} apresenta as ligações entre arquivos com funções duplicadas em 100\% de similaridade. Desse processo resultaram 13 duplicações propostas aos alunos da disciplina MAC0470/5856. Os grupos selecionaram 12 duplicações para refatorar. Essa contagem não inclui as duplicações trabalhadas pelos autores (Seção~\ref{sec:refatoracao}).
+A detecção com o \texttt{ArKanjo}, com similaridade de 90\% e 100\%, onde cada duplicação foi avaliada manualmente quanto ao potencial de refatoração. A Figura~\ref{fig:treemap} mostra os subsistemas de drivers de gpu e o iio no kernel, e a Figura~\ref{fig:mac0214} apresenta as ligações entre arquivos com funções duplicadas em 100\% de similaridade. Desse processo resultaram 13 duplicações propostas aos alunos da disciplina MAC0470/5856. Os grupos selecionaram 12 duplicações para refatorar. Essa contagem não inclui as duplicações trabalhadas pelo bolsista (Seção~\ref{sec:refatoracao}).
 
 \begin{figure}[htbp]
 \centering
@@ -165,6 +175,7 @@ A detecção com o \texttt{ArKanjo}, com similaridade de 90\% e 100\%, onde cada
 
 \subsection{Refatoração: \textit{patches} e interação com a comunidade}\label{sec:refatoracao}
 
+%TODO: separar patches do Gabriel
 No período, foram submetidos 17 \textit{patches}: 5 pelos autores (GID~0 na Tabela~\ref{tab:patches}) e 12 pelos alunos. Desses, 10 foram aceitos e integrados (59\%), 4 rejeitados, 2 ficaram sem respostas e 1 foi abandonado durante o desenvolvimento.\footnote{O resumo do SIICUSP (Apêndice~\ref{apx:publicacoes-resultantes-da-bolsa}) e o documento da disciplina MAC0215 (Apêndice~\ref{apx:mac0215}) mostram dados de uma data anterior a este relatório: 8 aceitos, 4 em revisão e 5 não incorporados, com remoção líquida de 1.096 linhas. O pôster apresentado já traz os números atuais.} Os \textit{patches} aceitos somam \texttt{+1.619/-2.758} linhas, uma remoção líquida de 1.139 linhas; um único \textit{patch} do amdgpu (\texttt{+1.274/-2.035}) responde por 761 delas.
 
 \begin{table}[!ht]
@@ -267,7 +278,10 @@ Dos 17 \textit{patches} submetidos, 10 foram aceitos e integrados (59\%), taxa p
 
 Os objetivos específicos foram alcançados: detecção e seleção de duplicações, submissão de \textit{patches}, documentação das interações e sistematização de lições aprendidas. O \texttt{ArKanjo} foi aprimorado (\texttt{Tree-sitter}, métodos baseados em AST e embeddings, saídas estruturadas, comando de \textit{benchmark}) e usado por 22 alunos, o que sugere seu potencial para apoiar novos contribuidores. Os próximos passos são o conjunto de dados (MSR 2027) e a análise dos métodos de refatoração (TechDebt 2027).
 
-\section{Atividades futuras}
+\section{Plano de atividades para o próximo período (Prorrogacao)}
+
+%TODO: pegar RQs em https://docs.google.com/presentation/d/1ZU9dfMWIABebMV4LS0wPu0GoaloJe87BLOoD7sbr0Js/edit?slide=id.g1384dc5f0b_0_0#slide=id.g1384dc5f0b_0_0
+
 
 Estão previstos:
 
