@@ -1,15 +1,38 @@
+%%
+%% This is file `abntlatex.cls',
+%% generated with the docstrip utility.
+%%
+%% The original source files were:
+%%
+%% abntlatex.dtx  (with options: `class')
+%%
+%% This is a generated file.
+%%
+%% Copyright (C) 2024 by abntlatex
+%%
+%% This file may be distributed and/or modified under the conditions of
+%% the LaTeX Project Public License, either version 1.3c of this license
+%% or (at your option) any later version. The latest version of this
+%% license is in:
+%%
+%% https://www.latex-project.org/lppl/
+%%
+%% and version 1.3c or later is part of all distributions of LaTeX
+%% version 2006/05/20 or later. TODO:
+%%
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{abntlatex}[2024-07-17 v1.0 .dtx ABNT Latex]
+\ProvidesClass{abntlatex}
+    [2024-07-17 v1.0 .dtx ABNT Latex]
 \PassOptionsToClass{
   a4paper, % Se impresso o documento deve estar no formato a4
   12pt}{article}%
 \DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}
 \ProcessOptions\relax
 \LoadClass{article}
-\RequirePackage[a4paper, 
-                top    = 3.0cm, 
-                bottom = 2.0cm, 
-                left   = 3.0cm, 
+\RequirePackage[a4paper,
+                top    = 3.0cm,
+                bottom = 2.0cm,
+                left   = 3.0cm,
                 right  = 2.0cm]{geometry}
 \RequirePackage[brazilian]{babel}
 \RequirePackage[T1]{fontenc}
@@ -17,7 +40,9 @@
 \RequirePackage{indentfirst}
 \RequirePackage{microtype}
 \RequirePackage{hyperref}
-\RequirePackage[brazilian, hyperpageref]{backref}	
+\RequirePackage[brazilian, hyperpageref]{backref}
+
+
 \newcommand{\splittext}[2][,]{%
 \begingroup%
     \def\start{}%
@@ -50,6 +75,7 @@
     \def\baselinestretch{#1}\@currsize\vskip\baselineskip
   }
 }
+
 \newcommand\pretext{%
   \if@twocolumn%
     \onecolumn%
@@ -60,14 +86,14 @@
   \pagestyle{empty}%
   \setstretch{1.5}%
 }
-\newcommand*{\university}[1]{\gdef\@university{#1}}
-\newcommand*{\subtitle}[1]{\gdef\@subtitle{#1}}
-\newcommand*{\predate}[1]{\gdef\@predate{#1}}
-\newcommand*{\documenttype}[1]{\gdef\@documenttype{#1}}
-\newcommand*{\preamble}[1]{\gdef\@preamble{#1}}
-\newcommand*{\supervisor}[1]{\gdef\@supervisor{#1}}
-\newcommand*{\cosupervisor}[1]{\gdef\@cosupervisor{#1}}
-\newcommand*{\keywords}[1]{\gdef\@keywords{#1}
+\newcommand*{\university}[1]{\gdef\@university{#1}}%
+\newcommand*{\subtitle}[1]{\gdef\@subtitle{#1}}%
+\newcommand*{\predate}[1]{\gdef\@predate{#1}}%
+\newcommand*{\documenttype}[1]{\gdef\@documenttype{#1}}%
+\newcommand*{\preamble}[1]{\gdef\@preamble{#1}}%
+\newcommand*{\supervisor}[1]{\gdef\@supervisor{#1}}%
+\newcommand*{\cosupervisor}[1]{\gdef\@cosupervisor{#1}}%
+\newcommand*{\keywords}[1]{\gdef\@keywords{#1}}%
 \renewcommand{\@maketitle}{%
   \newpage%
   \null%
@@ -85,7 +111,7 @@
       {\large\begin{tabular}[t]{c}%
         \@author% Obrigatorio
       \end{tabular}\par}%
-        
+
       \vspace*{\fill}%
       {\LARGE\@title}% Obrigatorio
       {\ifdefined\@subtitle%
@@ -139,7 +165,7 @@
       }%
     \end{minipage}
     \vspace*{\fill}%
-      
+
     {\raggedleft
     \begin{minipage}[c]{0.5\textwidth}%
       \setstretch{1}%
@@ -181,17 +207,18 @@
 \newcommand{\backcover}{%
   %\renewcommand{\thepage}{Back Cover}%
   \if@twocolumn
-    \ifnum\col@number=\@ne 
-      \@backcover 
-    \else 
+    \ifnum\col@number=\@ne
+      \@backcover
+    \else
       \twocolumn [ \@backcover ]
-    \fi 
-  \else 
-    \newpage\@backcover 
+    \fi
+  \else
+    \newpage\@backcover
   \fi
   \thispagestyle{empty}%
   \newpage%
 }
+
 \newcommand{\@intercatalog}{%
   \newpage%
   \null%
@@ -224,13 +251,13 @@
 
 \newcommand{\intercatalog}{%
   \if@twocolumn
-    \ifnum\col@number=\@ne 
-      \@intercatalog 
-    \else 
+    \ifnum\col@number=\@ne
+      \@intercatalog
+    \else
       \twocolumn [ \@intercatalog ]
-    \fi 
-  \else 
-    \newpage\@intercatalog 
+    \fi
+  \else
+    \newpage\@intercatalog
   \fi
   \let\actualpagenumering\thepage
   \pagenumbering{gobble}%
@@ -287,7 +314,7 @@
 
 \renewcommand{\listoffigures}{%
   {\centering\section*{\listfigurename}}
-  \@mkboth 
+  \@mkboth
     {\MakeUppercase \listfigurename }
     {\MakeUppercase \listfigurename }
   \begingroup
@@ -304,7 +331,7 @@
 
 \renewcommand\listoftables{%
   {\centering\section*{\listtablename}}
-  \@mkboth 
+  \@mkboth
     {\MakeUppercase \listtablename }
     {\MakeUppercase \listtablename }
   \begingroup
@@ -356,7 +383,7 @@
 \renewcommand\section{%
   \if@twoside%
     \cleardoublepage%
-  \fi% 
+  \fi%
   \@startsection{section}{1}{\z@}%
   {\z@}%
   {12pt}%
@@ -381,7 +408,6 @@
 
 \newcommand\descrfigure[2][\@empty]{%
 \caption*{\small \ifx#1\@empty\relax\else#1:~\fi#2}}
-
 \newcommand\backtext{%
   \if@twocolumn%
   \onecolumn
@@ -446,4 +472,7 @@
   \endgroup
   \newpage
 }
+\endinput % End of File.
 \endinput
+%%
+%% End of file `abntlatex.cls'.

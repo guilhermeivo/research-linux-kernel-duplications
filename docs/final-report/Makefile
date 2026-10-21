@@ -4,8 +4,6 @@ BIB  = references.bib
 all: pdf
 
 pdf: $(MAIN).tex $(BIB)
-	make -C ../../coursework/mac0215
-
 	pdflatex $(MAIN).tex
 	bibtex $(MAIN)
 	bibtex pub
