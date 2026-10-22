@@ -13,6 +13,8 @@
 
 \usepackage{listings}
 
+\usepackage{subcaption}
+
 \renewcommand{\lstlistingname}{Código}
 \renewcommand{\lstlistlistingname}{Lista de Códigos}
 
@@ -61,8 +63,15 @@ Período coberto pelo Relatório Científico: 01/11/2025 a 30/10/2026%
 \makeatother
 
 \def\kernelauthor{42.412}
-\def\kernelfile{64.077}
 \def\kernelloc{28.130.130}
+
+\hyphenation{Plotly ArKanjo WebGL Canvas amdgpu iio kernel Linux}
+
+\def\boxtakeaway#1{
+\noindent%
+\fbox{\parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule\relax}{#1}}
+\vspace{5pt}
+}
 
 \begin{document}
 \pretext
@@ -81,6 +90,8 @@ A manutenção de sistemas computacionais de larga escala impõe desafios cresce
 % 2.3) Realizações no período, se pertinente, referenciadas à lista de
 % publicações do item 5 (até 10 páginas).
 
+\part{Relatório Científico}
+
 \section{Objetivos}
 
 O objetivo central deste projeto é contribuir para a melhoria da qualidade do código do kernel Linux, identificando e mitigando duplicações de código em subsistemas selecionados. Como objetivos específicos:
@@ -97,31 +108,13 @@ O objetivo central deste projeto é contribuir para a melhoria da qualidade do c
     \item Sistematizar as lições aprendidas e refletir sobre os aspectos sociotécnicos do processo de contribuição ao kernel Linux.
 \end{itemize}
 
-% TODO:
-%\begin{table}[htbp]
-%\centering
-%\small\linespread{1.0}\selectfont
-%\caption{Status dos objetivos específicos.}\label{tab:objetivos}
-%\begin{tabular}{p{6cm}p{6cm}c}
-%\topline
-%\textbf{Objetivo} & \textbf{Status} & \textbf{Seção}\\
-%\midline
-%Detectar duplicações em nível de função com o \texttt{ArKanjo} & Alcançado & 3.1\\
-%Analisar e selecionar duplicações para refatoração & Alcançado & 3.1\\
-%Propor e submeter \textit{patches} & Alcançado (17 submetidos, 10 aceitos) & 3.2--3.3\\
-%Documentar o processo e as interações & Alcançado & 3.2\\
-%Sistematizar lições aprendidas & Alcançado (T5); análise dos métodos em andamento & 3.2\\
-%\bottomline
-%\end{tabular}
-%\end{table}
-
 \section{Metodologia}\label{sec:metodologia}
 
-Este projeto dá continuidade a estudos conduzidos pelo grupo de pesquisa entre 2024 e 2025~\cite{arcanjo2025arkanjo,duplicationdry}, anterior à vigência da bolsa, que utilizou o \texttt{ArKanjo}~\cite{arcanjo2025arkanjo} para avaliar a viabilidade técnica e social da refatoração de duplicações no kernel Linux. Em 2026, os procedimentos foram replicados com novos participantes. A abordagem é um estudo multimétodo de caráter etnográfico, que combina detecção automatizada de duplicações, observação participante~\cite{Seaman2008,Robson2016,Wen2021} e um estudo com novos contribuidores (estudantes) do kernel Linux.
+Este projeto dá continuidade a estudos conduzidos pelo grupo de pesquisa entre 2024 e 2025\cite{arcanjo2025arkanjo,duplicationdry}, anteriores à vigência da bolsa, que utilizaram o \texttt{ArKanjo}~\cite{arcanjo2025arkanjo} para avaliar a viabilidade técnica e social da refatoração de duplicações no kernel Linux. Em 2026, os procedimentos foram replicados com novos participantes. A abordagem é um estudo multimétodo de caráter etnográfico, que combina detecção automatizada de duplicações, observação participante\cite{Seaman2008,Robson2016,Wen2021} e um estudo com novos contribuidores (estudantes) do kernel Linux.
 
 \subsection{Subsistemas estudados}
 
-O estudo concentrou-se nos subsistemas \textbf{amdgpu} e \textbf{iio}. O \textbf{amdgpu}, driver das GPUs AMD, tem arquitetura em camadas, com código genérico nas camadas superiores e código específico de hardware nas inferiores, frequentemente compartilhado entre dispositivos~\cite{Wang2011}. Isso favorece a cópia de código entre gerações de hardware~\cite{duplicationdry}. O iio (\textit{Industrial I/O}) reúne \textit{drivers} de conversores analógico-digitais e digital-analógicos e foi escolhido por ser considerado uma porta de entrada acessível para novos contribuidores~\cite{duplicationdry}. A distribuição das duplicações nos dois subsistemas é apresentada na Seção~\ref{sec:deteccao}.
+O estudo concentrou-se nos subsistemas \texttt{\textbf{amdgpu}} e \texttt{\textbf{iio}}. O \texttt{amdgpu}, \textit{driver} das GPUs AMD, tem arquitetura em camadas, com código genérico nas camadas superiores e código específico de hardware nas inferiores, frequentemente compartilhado entre dispositivos\cite{Wang2011}. Isso favorece a cópia de código entre gerações de hardware\cite{duplicationdry}. O \texttt{iio} (\textit{Industrial I/O}) reúne \textit{drivers} de conversores analógico-digitais e digital-analógicos e foi escolhido por ser considerado uma porta de entrada acessível para novos contribuidores\cite{duplicationdry}. A distribuição das duplicações nos dois subsistemas é apresentada na Seção~\ref{sec:visualizacoes}.
 
 \subsection{Procedimentos}
 
@@ -138,54 +131,81 @@ O estudo foi organizado em três etapas:
 
     \item \textbf{Análise dos \textit{patches}}
 
-    Caracterização dos métodos de refatoração usados e dos \textit{takeaways} sobre a revisão e a aceitação, considerando os \textit{patches} de 2026.
+    Identificação, a partir das revisões dos mantenedores, de \textit{takeaways} sobre a aceitação e a rejeição das propostas, considerando os \textit{patches} de 2026.
 \end{enumerate}
 
-\subsection{Coleta de dados}
+\subsection{Coleta de dados}\label{sec:coleta-dados}
 
-Por meio de \textbf{observação participante}, o bolsista com a comunidade e submeteram \textit{patches} para contribuir com os subsistemas analisados. Além disso, conduziram um \textbf{estudo com participantes} envolvendo grupos de alunos da disciplina MAC0470/5856 -- Desenvolvimento de Software Livre (USP, 2026/1)\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=MAC0470}}. Os alunos atuaram como contribuidores, utilizando os resultados de detecção de duplicações de código da ferramenta \texttt{ArKanjo} para identificar, refatorar e submeter contribuições.
+% 40 de graduacao; 16 de pos; 56 total; citar que é graduacao e pos
 
-%TODO: 40 de graduacao; 16 de pos; 56 total; citar que é graduacao e pos
+Por meio de \textbf{observação participante}, o bolsista interagiu com a comunidade e submeteu \textit{patches} para contribuir com os subsistemas analisados. Além disso, conduziu um \textbf{estudo com participantes} envolvendo alunos da disciplina MAC0470/5856 -- Desenvolvimento de Software Livre (USP, 2026/1)\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=MAC0470}}, que contou com 56 alunos matriculados, sendo 40 de graduação e 16 de pós-graduação. Desse total, 22 alunos (39,3\%) participaram das atividades de deduplicação de código, organizados em 12 grupos. A disciplina foi organizada em duas fases: na primeira, os estudantes atuaram como contribuidores do kernel Linux, utilizando os resultados de detecção do \texttt{ArKanjo} para identificar, refatorar e submeter \textit{patches} relacionados a duplicação de código; na segunda, os grupos escolheram um projeto de software livre qualquer para contribuir, e alguns optaram pelo próprio \texttt{ArKanjo}.
+
+Os demais 34 alunos, durante a primeira fase, escolheram outros temas de contribuição ao kernel Linux. Essas contribuições não fazem parte da análise deste relatório.
 
 \section{Atividades realizadas e resultados}
 
-%TODO:
-% 3.2. Visualizacao
+\subsection{Análise: detecção e seleção de duplicações}\label{sec:deteccao}
+
+A detecção, no âmbito da disciplina, foi realizada com o \texttt{ArKanjo} apenas nos subsistemas \texttt{amdgpu} e \texttt{iio}, com similaridade de 90\% e 100\%, sendo cada duplicação avaliada manualmente quanto ao potencial de refatoração. Desse processo foram propostas 13 duplicações aos alunos da disciplina MAC0470/5856. Os grupos selecionaram 12 duplicações para realizar refatorações. Essa contagem não inclui as duplicações trabalhadas pelo bolsista (Seção~\ref{sec:refatoracao}).
+
+\subsection{Visualizações: exploração de duplicações de código}\label{sec:visualizacoes}
+
+Para facilitar a exploração dos resultados de detecção de duplicações produzidos pelo \texttt{ArKanjo}, estão sendo desenvolvidas, pelo bolsista, visualizações interativas no contexto da disciplina MAC0214 -- Atividade Curricular em Cultura e Extensão (USP, 2026/2)\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=mac0214}}. Diferente da detecção usada na seleção de \textit{patches}, as visualizações foram geradas sobre o kernel Linux completo. A Figura~\ref{fig:treemap} apresenta uma visualização hierárquica (\textit{treemap}) do kernel, com os subsistemas \texttt{amdgpu} e \texttt{iio} em destaque, mostrando a distribuição das duplicações entre suas pastas. A Figura~\ref{fig:heb} apresenta uma visualização baseada em \textit{Hierarchical Edge Bundling} (HEB), na qual as conexões representam relações de duplicação entre arquivos.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/treemap.png}
+        \caption{Concentração de duplicações nas pastas dos subsistemas analisados em destaque. Renderização de uma visualização interativa implementada usando Plotly.}
+        \label{fig:treemap}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/heb.png}
+        \caption{Cada aresta liga dois arquivos com funções duplicadas. Renderização de uma visualização interativa implementada com WebGL2 ou Canvas2d.\footnotemark}
+        \label{fig:heb}
+    \end{subfigure}
+    \caption{Visualizações de duplicações de função detectadas pelo  \texttt{ArKanjo} no kernel Linux, com similaridade de 100\%.}
+\end{figure}
+
+\footnotetext{\url{https://guilhermeivo.com.br/duplication-viz/}}
+
+\subsection{Refatoração: \textit{patches} e interação com a comunidade}\label{sec:refatoracao}
+
 %3.3 Refatoração: patches e interação com a comunidade
 %(observacao participante )
+
+Por meio de observação participante, o bolsista investigou o processo de remoção de duplicações de código nos subsistemas \texttt{amdgpu} e \texttt{iio} do kernel Linux, desde a identificação de oportunidades de refatoração até a revisão das propostas pelos mantenedores.
+
+No período, o bolsista atuou como contribuidor, submetendo 4 séries de \textit{patches}, das quais três foram aceitos e integrados ao kernel, enquanto um permaneceu sem resposta dos mantenedores (as 4 primeiras contribuições GID~0 na Tabela~\ref{tab:patches}, onde a quinta contribuição GID~0 foi desenvolvida por um membro do grupo de pesquisa externo à disciplina), e, nas contribuições dos grupos, como mentor.
+
+Sua principal contribuição foi uma série de nove \textit{patches} ao \texttt{amdgpu} (+1274/-2035, GID~0 na Tabela~\ref{tab:patches})\footnote{\url{https://lore.kernel.org/all/20260512190019.228440-1-guilherme.bozi@usp.br/}}, que substituiu estruturas \texttt{switch-case} de tradução de GPIO por tabelas de consulta com funções auxiliares genéricas, com redução líquida de 761 linhas; a série foi aceita já na primeira versão. Em outra contribuição, ao tentar modernizar o \textit{driver} \texttt{xilinx-ams} do \texttt{iio}\footnote{\url{https://lore.kernel.org/all/20260513003503.339418-1-guilherme.bozi@usp.br/}}, e remover duplicações, o bolsista identificou e corrigiu um acesso fora dos limites (\textit{out-of-bounds}), falha à qual foi atribuído o CVE-2026-72480\footnote{\url{https://www.cve.org/CVERecord/?id=CVE-2026-72480}}.
+
+Como parte do fluxo de desenvolvimento estabelecido pelo grupo de pesquisa, os \textit{patches} eram submetidos inicialmente a uma instância interna do Lore do IME-USP\footnote{\url{https://lore.kernel.ime.usp.br/kernel.ime/}}, onde um sistema de integração contínua (CI) executava verificações automatizadas antes do envio às listas de discussão oficiais do kernel Linux. Essa etapa permitia identificar problemas antes da submissão à comunidade e integrava o processo de preparação e validação das contribuições.
+
+As interações com os mantenedores são analisadas na Seção~\ref{sec:mentoria}, que apresenta os \textit{patches} submetidos no período e os relaciona aos \textit{takeaways} do estudo anterior do grupo\cite{duplicationdry}.
+
+\subsubsection{Mentoria e avaliação dos \textit{patches}}\label{sec:mentoria}
+
 %3.4. Mentoria e análise do patches do estudantes
 %(observacao participante as observer)
 %citar o CI
 
-\subsection{Análise: detecção e seleção de duplicações}\label{sec:deteccao}
+Como mentor, o bolsista indicou duplicações candidatas aos grupos, auxiliou na resolução dos problemas, na submissão e no atendimento às revisões, e revisou \textit{patches} dos grupos na instância interna do Lore antes do envio às listas oficiais.
 
-A detecção com o \texttt{ArKanjo}, com similaridade de 90\% e 100\%, onde cada duplicação foi avaliada manualmente quanto ao potencial de refatoração. A Figura~\ref{fig:treemap} mostra os subsistemas de drivers de gpu e o iio no kernel, e a Figura~\ref{fig:mac0214} apresenta as ligações entre arquivos com funções duplicadas em 100\% de similaridade. Desse processo resultaram 13 duplicações propostas aos alunos da disciplina MAC0470/5856. Os grupos selecionaram 12 duplicações para refatorar. Essa contagem não inclui as duplicações trabalhadas pelo bolsista (Seção~\ref{sec:refatoracao}).
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figures/treemap.png}
-\caption{Concentração de duplicações de códigos nas pastas \texttt{drivers/iio} e \texttt{drivers/gpu} do kernel Linux}\label{fig:treemap}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figures/heb.png}
-\caption{Duplicações de função detectadas pelo \texttt{ArKanjo} no kernel Linux, com similaridade de 100\%. Cada aresta liga dois arquivos com funções duplicadas. Renderização de uma visualização interativa implementada com WebGL2 ou Canvas2d.}\label{fig:mac0214}
-\end{figure}
-
-\subsection{Refatoração: \textit{patches} e interação com a comunidade}\label{sec:refatoracao}
-
-%TODO: separar patches do Gabriel
-No período, foram submetidos 17 \textit{patches}: 5 pelos autores (GID~0 na Tabela~\ref{tab:patches}) e 12 pelos alunos. Desses, 10 foram aceitos e integrados (59\%), 4 rejeitados, 2 ficaram sem respostas e 1 foi abandonado durante o desenvolvimento.\footnote{O resumo do SIICUSP (Apêndice~\ref{apx:publicacoes-resultantes-da-bolsa}) e o documento da disciplina MAC0215 (Apêndice~\ref{apx:mac0215}) mostram dados de uma data anterior a este relatório: 8 aceitos, 4 em revisão e 5 não incorporados, com remoção líquida de 1.096 linhas. O pôster apresentado já traz os números atuais.} Os \textit{patches} aceitos somam \texttt{+1.619/-2.758} linhas, uma remoção líquida de 1.139 linhas; um único \textit{patch} do amdgpu (\texttt{+1.274/-2.035}) responde por 761 delas.
+Foram submetidas 17 séries de \textit{patches} para remoção de duplicações nos subsistemas \texttt{amdgpu} e \texttt{iio} do kernel Linux. Dessas, 4 foram submetidas pelo bolsista, 1 foi desenvolvido por um pesquisador do grupo externo à disciplina e 12 foram elaborados pelos estudantes da disciplina MAC0470/5856, organizados em 12 grupos. Das 17 séries de \textit{patches}, 10 foram aceitas e integradas ao kernel (59\%), quatro foram rejeitadas, dois permaneceram sem resposta dos mantenedores e uma foi abandonada durante o desenvolvimento.\footnote{O resumo do SIICUSP (Apêndice~\ref{apx:publicacoes-resultantes-da-bolsa}) mostra dados de uma data anterior a este relatório: 8 aceitos, 4 em revisão e 5 não incorporados, com remoção líquida de 1.096 linhas. O pôster apresentado já traz os números atuais.} A Tabela~\ref{tab:patches} apresenta o estado de cada contribuição, o subsistema envolvido, o limiar de similaridade considerado, os \textit{takeaways} associados e as linhas adicionadas e removidas.
 
 \begin{table}[!ht]
 \centering
 \small\linespread{1.0}\selectfont
-\caption{Resumo das contribuições de \textit{patches} para a deduplicação ao kernel Linux\tnote{a}.}\label{tab:patches}
 \begin{threeparttable}
+    \caption{Resumo das contribuições das séries de \textit{patches} de deduplicação ao kernel Linux\tnote{a}.}
+    \label{tab:patches}
 \begin{tabularx}{\textwidth}{ c c c X l c }
 \toprule
-\textbf{GID} & \textbf{SS} & \textbf{SML} & \textbf{Patch Status} & \textbf{Takeaway} & \textbf{Diff} \\
+\textbf{GID} & \textbf{SS} & \textbf{SML} & \textbf{Series Status} & \textbf{Takeaway} & \textbf{Diff} \\
 \midrule
 \multirow[t]{5}{*}{0} & AMD & 100\% & No response & -- & \texttt{+86/-114} \\
   & IIO & 100\% & Accepted (v1), Merged & -- & \texttt{+15/-32} \\
@@ -208,41 +228,42 @@ No período, foram submetidos 17 \textit{patches}: 5 pelos autores (GID~0 na Tab
 \end{tabularx}
 \begin{tablenotes}[flushleft]
 \footnotesize
-\item[a] A tabela resume as contribuições por grupo, incluindo o subsistema (amdgpu e iio), o limiar de similaridade, o status do \textit{patch} (Merged, Accepted, Rejected, Dropped ou No response), os \textit{takeaways}, e os diff de código que mostram as linhas adicionadas e removidas.
+\item[a] GID: grupo (0: bolsista e pesquisador do grupo; 1--12: grupos da disciplina); SS: subsistema (AMD: \texttt{amdgpu}; IIO: \texttt{iio}); SML: limiar de similaridade; Status: situação da série (Accepted: aprovada; Merged: integrada; Rejected; Dropped: abandonada; No response), com a versão (vN) em que foi encerrada; Diff: linhas adicionadas e removidas.
 \end{tablenotes}
 \end{threeparttable}
 \end{table}
 
-O estudo anterior do grupo~\cite{duplicationdry} analisou 13 contribuições de deduplicação enviadas ao amdgpu e ao iio, das quais 8 foram aceitas (62\%). A análise das revisões dos mantenedores resultou em quatro \textit{takeaways}: o \textit{driver forking} (T1), a priorização da legibilidade sobre a remoção de duplicação (T2), o custo de integração das mudanças (T3) e o impacto no desempenho (T4).
+As 10 séries de \textit{patches} integradas totalizaram 1.619 linhas adicionadas e 2.758 removidas, resultando em uma redução líquida de 1.139 linhas. Uma contribuição ao subsistema \texttt{amdgpu}, com 1.274 linhas adicionadas e 2.035 removidas, correspondeu a uma redução líquida de 761 linhas.
 
-A análise dos \textit{patches} do período, apresentada durante as apresentações orais do SIICUSP~2026~\cite{bozi2026siicusp}, identificou um quinto \textit{takeaway},
+Para analisar as decisões dos mantenedores, foram considerados os quatro \textit{takeaways} identificados no estudo anterior do grupo\cite{duplicationdry}. Esse estudo examinou 13 contribuições de deduplicação nos subsistemas \texttt{amdgpu} e \texttt{iio}, das quais oito foram aceitas (62\%). Os \textit{takeaways} abordam o \textit{driver forking} (T1), a priorização da legibilidade (T2), o custo de integração das mudanças (T3) e o impacto no desempenho (T4).
 
 \vspace{20pt}
-\noindent
-\fbox{%
-  \parbox{\dimexpr\textwidth-2\fboxsep-2\fboxrule\relax}{%
-\textbf{Takeaway T5 (Abstraction Scope):} \textit{Mantenedores podem rejeitar ou redirecionar uma remoção de duplicação quando o código duplicado não compartilha uma barreira de abstração adequada. Consolidá-lo em uma camada compartilhada pode ser considerado inadequado quando o comportamento não se aplica de modo uniforme a todos os componentes atendidos por essa camada.}
-  }%
-}
+
+\boxtakeaway{\textbf{Takeaway T1 (Driver Forking):} \textit{Driver developers do not necessarily view duplicated code negatively, often consciously cloning entire drivers for many reasons; however, sometimes such duplications are explicitly acknowledged as technical debt, and their repayments are accepted when perceived as safe and stable.}}
+
+\boxtakeaway{\textbf{Takeaway T2 (Readability):} \textit{Maintainers prioritized readability over removing duplication across many contexts. Accepting debt from duplication may be worth it if it results in easier-to-read, more understandable code. Nevertheless, the criteria used to accept or reject similar repayments that affect readability require deeper investigation.}}
+
+\boxtakeaway{\textbf{Takeaway T3 (Integration Overhead):} \textit{Maintainers may decline to accept a duplication repayment if it is not considered impactful enough, because simply integrating it into the Linux upstream incurs considerable debt principal.}}
+
+\boxtakeaway{\textbf{Takeaway T4 (Performance):} \textit{Interactions with maintainers hinted that duplications can be forgiven if they improve performance in contexts where resources are limited. In these scenarios, avoiding performance debt is prioritized.}}
+
+A análise dos \textit{patches} submetidos no período também levou à formulação de um quinto \textit{takeaway}, apresentado nas apresentações orais do SIICUSP~2026~\citepub{bozi2026siicusp}. O T5 foi derivado da leitura das discussões de revisão dos patches de 2026. O bolsista leu as threads de cada contribuição e registrou as justificativas dos mantenedores para aceitar, redirecionar ou rejeitar a proposta, verificando se cada uma se enquadrava em T1--T4. A formulação do T5 e sua associação aos patches foram então discutidas e validadas com o grupo de pesquisa.
+
 \vspace{20pt}
+\boxtakeaway{\textbf{Takeaway T5 (Abstraction Scope):} \textit{Mantenedores podem rejeitar ou redirecionar uma remoção de duplicação quando o código duplicado não compartilha uma barreira de abstração adequada. Consolidá-lo em uma camada compartilhada pode ser considerado inadequado quando o comportamento não se aplica de modo uniforme a todos os componentes atendidos por essa camada.}}
+\vspace{10pt}
 
-Esse resultado surgiu em 5 dos 17 \textit{patches}, 3 aceitos após redirecionamento e 2 rejeitados (Tabela~\ref{tab:patches}). Em um deles, que foi usado para identificação desse \textit{takeaway}, o mantenedor comentou:
+O T5, relacionado ao escopo da abstração, foi associado a cinco das 17 séries de \textit{patches}: 3 foram aceitos após alterações na proposta durante o processo de revisão, e 2 foram rejeitados (Tabela~\ref{tab:patches}). Em um dos casos considerados na formulação desse \textit{takeaway}, o mantenedor comentou:
 
-% Como o T5 foi derivado?
-
-\noindent\begin{quote}
-\noindent\textit{``Please don't when they are functional identical then move them a layer up instead of messing up the backends.''}
+\begin{quote}
+\textit{``Please don't when they are functional identical then move them a layer up instead of messing up the backends.''} (GID 0, Tabela \ref{tab:patches})
 \end{quote}
 
-O T5 complementa T1 a T4 ao mostrar que a rejeição pode decorrer do \textbf{escopo da abstração}, e não só de legibilidade, desempenho ou custo de integração. O T4 não foi associado a nenhum \textit{patch} analisado em 2026.
+Entre os \textit{patches} analisados no período, T1, T2 e T3 foram associados a contribuições da tabela, enquanto T4 não foi associado a nenhum dos casos. O T5 acrescenta à análise a questão do escopo da abstração, identificada a partir das revisões das contribuições submetidas em 2026.
 
-\subsection{Estudo com participantes (MAC0470)}
+\subsection{Contribuições: ArKanjo e \textit{dataset}}
 
-Participaram 22 alunos, em 12 grupos diferentes, selecionaram 12 duplicações (Seção~\ref{sec:deteccao}) e submeteram 12 \textit{patches}, dos quais 6 foram aceitos (50\%).
-
-\subsection{Contribuições: ArKanjo e dados}
-
-Durante a bolsa, o \texttt{ArKanjo} recebeu melhorias arquiteturais e novas funcionalidades, entre elas:
+Durante a bolsa, o bolsista implementou no \texttt{ArKanjo} melhorias arquiteturais e novas funcionalidades, entre elas:
 
 \begingroup
 \renewcommand{\labelenumi}{(\alph{enumi})}
@@ -251,6 +272,8 @@ Durante a bolsa, o \texttt{ArKanjo} recebeu melhorias arquiteturais e novas func
 \item uso de árvores sintáticas abstratas (ASTs) durante o \textit{pipeline} de análise;
 \item um sistema de comandos mais modular, que reduz o esforço para contribuições externas;
 \item e saídas estruturadas (JSON e \textit{templates}, exemplo de uso no Código~\ref{lbl:code-explorer}), para integração com \textit{scripts}.
+\end{enumerate}
+\endgroup
 
 \vspace{20pt}
 
@@ -258,47 +281,66 @@ Durante a bolsa, o \texttt{ArKanjo} recebeu melhorias arquiteturais e novas func
 arkanjo explorer --template "{func_a:function} ~ {func_b:function} ({duplicated_lines:number} lines)"
 \end{lstlisting}
 
-\end{enumerate}
-\endgroup
+Além dessas, outras contribuições foram enviadas, por alguns grupos de estudantes, para o \texttt{ArKanjo}, durante a segunda fase da disciplina MAC0470/5856 (Seção~\ref{sec:metodologia}). Foram identificadas contribuições de 6 grupos, esse conjunto é distinto dos 22 alunos que atuaram na deduplicação de código do kernel (Seção~\ref{sec:coleta-dados}), alguns estudantes participaram das duas fases. Entre as contribuições, um grupo desenvolveu um método baseado em \textit{embeddings} para detecção de clones Type-3 e Type-4. Para avaliar esse método, o bolsista implementou, durante a disciplina MAC0215 -- Atividade Curricular em Pesquisa (USP, 2026/1)\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=mac0215}}, um comando de \textit{benchmark} no \texttt{ArKanjo}, com adaptadores para o BigCloneBench\cite{svajlenko2014bigclonebench} e o POJ-104\cite{mou2016convolutional} (Código~\ref{lbl:code-bench}), e o comparou com os métodos de AST linearizada e TF-IDF. Nos subconjuntos avaliados, os métodos de AST linearizada e de \textit{embeddings} apresentaram \textit{recall} superior ao do TF-IDF em clones Type-3 e Type-4, enquanto o método de \textit{embeddings} obteve o maior F1-Score agregado, mas com maior tempo de execução. Os resultados detalhados (\textit{recall}, F1-Score e tempo de execução por método e por \textit{benchmark}) estão no relatório produzido para a disciplina MAC0215\cite{bozi2026mac0215} e no vídeo de apresentação\footnote{\url{https://youtu.be/e_RUDak7OtA}}, material do primeiro semestre de 2026, anterior ao fechamento dos números deste relatório. A avaliação foi realizada nos subconjuntos dos \textit{benchmarks}; não foi possível avaliá-los diretamente no kernel Linux, que não possui rótulos de referência.
 
-Na segunda fase da disciplina MAC0470/5856 (2026/1), um grupo de alunos também desenvolveu um método baseado em \textit{embeddings} para detecção de clones Type-3 e Type-4. Para avaliá-lo, foi criado no \texttt{ArKanjo} um comando de \textit{benchmark} com adaptadores para o BigCloneBench\cite{svajlenko2014bigclonebench} e o POJ-104\cite{mou2016convolutional} (Código~\ref{lbl:code-bench}). Nesses \textit{benchmarks}, os métodos de AST linearizada e de \textit{embeddings} apresentaram \textit{recall} superior ao do método anterior (TF-IDF) em clones Type-3 e Type-4, e o de \textit{embeddings} obteve o maior F1-Score agregado, com tempo de execução maior (Apêndice~\ref{apx:mac0215}). A avaliação usou subconjuntos dos \textit{benchmarks} e não foi feita no kernel, que não possui rótulos.
-
-% NOTE: ajustado para ficar na proxima pagina!
-%\vspace{20pt}
-\newpage
+\vspace{20pt}
 \begin{lstlisting}[style=macrocode,numbers=none,label=lbl:code-bench,language=bash,morekeywords={arkanjo},caption={\textit{Benchmark} para avaliação dos métodos de detecção de clones utilizando uma base de dados definida.}]
 arkanjo benchmark --methods="1,2,3,4" --dataset="bigclonebench"
 \end{lstlisting}
 
-Em conjunto com o grupo de pesquisa, está em construção um conjunto de dados sobre duplicações de código em listas de e-mails do kernel Linux usando um subconjunto de \textit{patches} do \textit{dataset} LKLM5Ws\cite{passos2026lkml5ws}, reunindo duplicações submetidas e discussões com mantenedores. O conjunto de dados será submetido ao MSR 2027 (\textit{Data and Tool Showcase Track}), como descrito no Apêndice~\ref{apx:trabalhos-em-preparacao}.
-
 \section{Conclusões e Discussões}
 
-Dos 17 \textit{patches} submetidos, 10 foram aceitos e integrados (59\%), taxa próxima à do estudo anterior do grupo (62\%). A remoção líquida de 1.139 linhas está concentrada em um único patch do amdgpu (761 linhas); a mediana nos \textit{patches} aceitos é de 46 linhas. Os \textit{takeaways} T1 a T3 reapareceram, T4 não foi observado e o novo T5 (Abstraction Scope) surgiu em 5 \textit{patches}. Em 4 deles ele coocorre com T1. De modo geral, a aceitação de uma deduplicação no kernel depende menos de identificar código semelhante do que do contexto: isolamento entre gerações de hardware, legibilidade e a escolha da camada de consolidação. O \texttt{ArKanjo} permitiu explorar uma base de 28 milhões de linhas e gerar candidatos que resultaram em \textit{patches} aceitos, mas cada caso exigiu avaliação manual e interação com os mantenedores.
+Das 17 séries de \textit{patches} submetidos, 10 foram aceitas e integradas (59\%), taxa próxima à do estudo anterior do grupo (62\%). A remoção líquida de 1.139 linhas está concentrada em uma única série do \texttt{amdgpu} (761 linhas); a mediana de remoção líquida por contribuição aceita é de 46 linhas. Os \textit{takeaways} T1 a T3 reapareceram, T4 não foi observado e o novo T5 (Abstraction Scope) surgiu em 5 séries de \textit{patches}. De modo geral, a aceitação de uma deduplicação no kernel depende menos de identificar código semelhante do que do contexto: isolamento entre gerações de hardware, legibilidade e a escolha da camada de consolidação. O \texttt{ArKanjo} gerou, nos subsistemas \texttt{amdgpu} e \texttt{iio}, candidatos que resultaram em \textit{patches} aceitos. A execução sobre o kernel completo, usada nas visualizações, mostrou-se viável (Seção~\ref{sec:visualizacoes}), embora a análise por subsistema possivelmente seja mais vantajosa por reduzir o volume de candidatos e aproximar o trabalho dos mantenedores responsáveis.
 
-Os objetivos específicos foram alcançados: detecção e seleção de duplicações, submissão de \textit{patches}, documentação das interações e sistematização de lições aprendidas. O \texttt{ArKanjo} foi aprimorado (\texttt{Tree-sitter}, métodos baseados em AST e embeddings, saídas estruturadas, comando de \textit{benchmark}) e usado por 22 alunos, o que sugere seu potencial para apoiar novos contribuidores. Os próximos passos são o conjunto de dados (MSR 2027) e a análise dos métodos de refatoração (TechDebt 2027).
+Os objetivos específicos foram alcançados: detecção e seleção de duplicações, submissão de \textit{patches}, documentação das interações e sistematização de lições aprendidas. O \texttt{ArKanjo} foi aprimorado (\texttt{Tree-sitter}, métodos baseados em AST e \textit{embeddings}, saídas estruturadas, comando de \textit{benchmark}), usado por 22 alunos na identificação de duplicações e recebeu contribuições de 6 grupos de estudantes na segunda fase, o que sugere seu potencial para apoiar novos contribuidores.
 
-\section{Plano de atividades para o próximo período (Prorrogacao)}
+% 3) Plano de atividades para o próximo período (não se aplica ao Relatório Científico Final) (até 2 páginas).
 
-%TODO: pegar RQs em https://docs.google.com/presentation/d/1ZU9dfMWIABebMV4LS0wPu0GoaloJe87BLOoD7sbr0Js/edit?slide=id.g1384dc5f0b_0_0#slide=id.g1384dc5f0b_0_0
+\part{Plano de atividades para o próximo período (prorrogação)}
 
+%TODO:
+% RQ5 relacionar com o BEPE
 
-Estão previstos:
+Este plano reúne as atividades em andamento e as previstas, desenvolvidas em conjunto com o grupo de pesquisa. A Tabela~\ref{tab:cronograma} resume os prazos conhecidos.
 
 \begingroup
 \renewcommand{\labelenumi}{(\alph{enumi})}
 \begin{enumerate}
-    \item a conclusão do conjunto de dados e a sua submissão ao MSR 2027, em conjunto com o grupo de pesquisa;
-    \item a submissão do \textit{short paper} ao TechDebt 2027, com a análise dos métodos de refatoração (Apêndice~\ref{apx:trabalhos-em-preparacao});
-    \item o desenvolvimento, no \texttt{ArKanjo}, à análise de duplicações temporais no kernel Linux, isto é, da evolução das duplicações ao longo do histórico, observada em nível de \textit{commits};
-    \item a continuidade do projeto \textit{``Estudo e mitigação de duplicações em projetos FLOSS utilizando a ferramenta ArKanjo''}, desenvolvido na disciplina MAC0214 -- Atividade Curricular em Cultura e Extensão. O projeto aplica o \texttt{ArKanjo} a projetos FLOSS como Git, QEMU e PostgreSQL, para avaliar a ferramenta em cenários próximos do uso cotidiano. Isso inclui documentar falsos positivos e negativos, falhas de análise, \textit{crashes} e problemas de desempenho, abrir \textit{issues} e, quando possível, desenvolver correções. Inclui também gerar e analisar visualizações (Figuras~\ref{fig:treemap} e \ref{fig:mac0214})\footnote{\url{https://guilhermeivo.com.br/duplication-viz/}}, que facilitam a análise dos resultados e a seleção de casos para refatoração. Esses casos poderão resultar em \textit{patches} submetidos às comunidades dos projetos, acompanhando-se o processo de revisão (Apêndice~\ref{apx:materiais-complementares}).
+    \item \textbf{Conjunto de dados de duplicações em listas de e-mails.} Está em construção, com o grupo de pesquisa, um conjunto de dados sobre duplicações de código em listas de e-mails do kernel Linux, a partir de um subconjunto do \textit{dataset} LKML5Ws\cite{passos2026lkml5ws}, reunindo as duplicações submetidas e as discussões com os mantenedores. Ele busca apoiar pesquisas sobre os motivos que levam à manutenção ou à remoção de código duplicado. O conjunto será submetido ao MSR 2027 (\textit{Data and Tool Showcase Track}), com os dados e a documentação de uso disponíveis no momento da submissão (Apêndice~\ref{apx:trabalhos-em-preparacao}).
+
+    \item \textbf{Estratégias de deduplicação.} A caracterização das estratégias adotadas nas contribuições de deduplicação, incluindo as analisadas nesta bolsa, será submetida como \textit{short paper} ao TechDebt 2027. Ela completa a sistematização das lições aprendidas, ao relacionar as estratégias aos \textit{takeaways} T1 a T5 (Apêndice~\ref{apx:trabalhos-em-preparacao}).
+
+    \item \textbf{Análise de duplicações temporais no \texttt{ArKanjo}.} Análise da evolução das duplicações ao longo do histórico do kernel Linux. Estão previstos a execução da detecção sobre versões sucessivas e o rastreamento dos clones em nível de \textit{commits}. A partir desse rastreamento, será investigada a relação entre duplicação e correções de \textit{bugs} inconsistentes, isto é, correções aplicadas a apenas uma das cópias de um trecho duplicado, verificando se e quando a correção chegou às demais.
+
+    \item \textbf{Visualizações das duplicações.} Continuidade do desenvolvimento das visualizações interativas dos resultados do \texttt{ArKanjo} (Seção~\ref{sec:visualizacoes}), com o refinamento das visões existentes.
 \end{enumerate}
 \endgroup
+
+% TODO: preencher periodos
+
+\begin{table}[htbp]
+\centering
+% \small\linespread{1.0}\selectfont
+\caption{Cronograma das atividades previstas.}\label{tab:cronograma}
+\begin{tabularx}{\textwidth}{X X}
+\toprule
+\textbf{Períodos} & \textbf{Entregável} \\
+\midrule
+& Conjunto de dados e artigo (MSR 2027) \\
+& \textit{Short paper} (TechDebt 2027) \\
+& Extensão do \texttt{ArKanjo} com análise temporal e de correções inconsistentes \\
+& Visualizações aprimoradas; possível artigo \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \cleardoublepage
 \backtext
 % \bibliographystyle{abnt}
+\begingroup
+\small
 \bibliography{references}
+\endgroup
 
 \begin{appendixenv}
 
@@ -340,7 +382,7 @@ Este trabalho foi apresentado em pôster no evento científico Simpósio Interna
 ]{figures/poster-siicusp.pdf}
 
 % Para as publicações listadas no item 5, inclua cópias das primeiras páginas.
-\cleardoublepage
+
 \section{Lista das publicações resultantes da bolsa}\label{apx:publicacoes-resultantes-da-bolsa}
 
 {
@@ -355,7 +397,7 @@ Este trabalho foi apresentado em pôster no evento científico Simpósio Interna
 \subsection{Cópias das primeiras páginas das publicações}
 
 \includepdf[
-    pages=-,
+    pages=-1,
     scale=0.9,
     picturecommand={
         \color{black}
@@ -363,41 +405,20 @@ Este trabalho foi apresentado em pôster no evento científico Simpósio Interna
         \put(25,25){\framebox(545,790){}}
     }
 ]{figures/abstract-siicusp.pdf}
-\includepdf[
-    pages=-,
-    scale=0.9,
-    picturecommand={
-        \color{black}
-        \linethickness{0.5pt}
-        \put(25,25){\framebox(545,790){}}
-    }
-]{figures/abstract-siicusp[en].pdf}
 
-\cleardoublepage
 \section{Lista dos trabalhos preparados ou submetidos, mas ainda não aceitos}\label{apx:trabalhos-em-preparacao}
 
-Durante o período da bolsa, estão sendo preparados trabalhos científicos relacionados à análise de duplicações de código no kernel Linux e às ferramentas desenvolvidas no projeto. Esses trabalhos têm como objetivo divulgar os resultados obtidos e contribuir para a pesquisa na área de engenharia de software.
+Estão sendo preparados, em conjunto com o grupo de pesquisa, trabalhos científicos relacionados à análise de duplicações de código no kernel Linux e às ferramentas desenvolvidas no projeto. Esses trabalhos têm como objetivo divulgar os resultados obtidos e contribuir para a pesquisa na área de engenharia de software.
 
 \begin{enumerate}
-    \item \textbf{TechDebt 2027 -- Short paper:} Está em preparação um short paper para submissão ao International Conference on Technical Debt (TechDebt 2027), como extensão do trabalho \textit{``When Do You Repeat Yourself? Voices from the Trenches of Linux Kernel Maintainers on Code Duplication''}\cite{duplicationdry}. O estudo investiga as estratégias de deduplicação adotadas em \textit{patches} relacionados à remoção de duplicações de código, incluindo aqueles analisados no trabalho anterior e novos \textit{patches} identificados no contexto de atividades acadêmicas recentes. O objetivo é caracterizar essas estratégias e identificar padrões e insights sobre as abordagens utilizadas para eliminar duplicações, complementando a análise anterior, que se concentrou principalmente nos motivos para a rejeição de \textit{patches} (\textit{takeaways}).
+\item \textbf{TechDebt 2027 -- \textit{Short paper}:} Está em preparação um \textit{short paper} para submissão à International Conference on Technical Debt (TechDebt 2027), como extensão do trabalho \textit{``When Do You Repeat Yourself? Voices from the Trenches of Linux Kernel Maintainers on Code Duplication''}\cite{duplicationdry}. O estudo investiga as estratégias de deduplicação adotadas em séries de \textit{patches} relacionadas à remoção de duplicações de código, incluindo aquelas analisadas no trabalho anterior e novas contribuições obtidas no contexto de atividades acadêmicas recentes. O objetivo é caracterizar essas estratégias e identificar padrões e aprendizados sobre as abordagens utilizadas para eliminar duplicações, complementando a análise anterior, que se concentrou principalmente nos motivos para a rejeição de \textit{patches} (\textit{takeaways}).
 
-    \item \textbf{MSR 2027 -- Data and Tool Showcase Track:} Está em preparação com foco na apresentação de um conjunto de dados relacionado à análise de duplicações de código no kernel Linux usando um subconjunto de \textit{patches} do \textit{dataset} LKLM5Ws\cite{passos2026lkml5ws}. O artigo pretende descrever o processo de construção do conjunto de dados, sua organização e suas possibilidades de utilização em pesquisas futuras, contribuindo para a reprodutibilidade e para novas investigações sobre duplicação de código no kernel Linux.
+\item \textbf{MSR 2027 -- \textit{Data and Tool Showcase Track}:} Está em preparação um artigo com foco na apresentação de um conjunto de dados relacionado à análise de duplicações de código no kernel Linux, construído a partir de um subconjunto do \textit{dataset} LKML5Ws\cite{passos2026lkml5ws}. O artigo pretende descrever o processo de construção do conjunto de dados, sua organização e suas possibilidades de utilização em pesquisas futuras, contribuindo para a reprodutibilidade e para novas investigações sobre duplicação de código no kernel Linux.
 \end{enumerate}
 
 Na data de elaboração deste relatório, ambos os trabalhos encontram-se em preparação para submissão e ainda não foram aceitos para publicação.
 
-\cleardoublepage
-\section{Materiais complementares das atividades acadêmicas}\label{apx:materiais-complementares}
-
-Durante o período da bolsa, parte das atividades relacionadas ao estudo de duplicações de código no kernel Linux também foi desenvolvida no contexto da disciplina MAC0215 -- Atividade Curricular em Pesquisa\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=mac0215}} e vem sendo desenvolvida na disciplina MAC0214 -- Atividade Curricular em Cultura e Extensão\footnote{\url{https://uspdigital.usp.br/jupiterweb/obterDisciplina?sgldis=mac0214}}. Essas atividades estão alinhadas ao tema do projeto de iniciação científica e contribuem para o aprofundamento do estudo, bem como para o desenvolvimento e a divulgação das ferramentas utilizadas na análise.
-
-Os materiais produzidos nessas disciplinas são apresentados a seguir como documentação complementar das atividades relacionadas ao projeto.
-
-\subsection{MAC0215 -- Atividade Curricular em Pesquisa}\label{apx:mac0215}
-
-No contexto da disciplina, foram produzidos um documento escrito e um vídeo relacionados ao trabalho desenvolvido.
-
-\noindent\textbf{Vídeo:} \url{https://youtu.be/e_RUDak7OtA?si=fNA9vsgieIbCYp5K}
+%TODO: colocar a versão inicial do techdebt2027, pode ser apenas a primeira página, com o abstract
 
 \end{appendixenv}
 
