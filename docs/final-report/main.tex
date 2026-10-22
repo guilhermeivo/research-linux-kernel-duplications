@@ -250,7 +250,9 @@ Para analisar as decisões dos mantenedores, foram considerados os quatro \texti
 A análise dos \textit{patches} submetidos no período também levou à formulação de um quinto \textit{takeaway}, apresentado nas apresentações orais do SIICUSP~2026~\citepub{bozi2026siicusp}. O T5 foi derivado da leitura das discussões de revisão dos patches de 2026. O bolsista leu as threads de cada contribuição e registrou as justificativas dos mantenedores para aceitar, redirecionar ou rejeitar a proposta, verificando se cada uma se enquadrava em T1--T4. A formulação do T5 e sua associação aos patches foram então discutidas e validadas com o grupo de pesquisa.
 
 \vspace{20pt}
-\boxtakeaway{\textbf{Takeaway T5 (Abstraction Scope):} \textit{Mantenedores podem rejeitar ou redirecionar uma remoção de duplicação quando o código duplicado não compartilha uma barreira de abstração adequada. Consolidá-lo em uma camada compartilhada pode ser considerado inadequado quando o comportamento não se aplica de modo uniforme a todos os componentes atendidos por essa camada.}}
+\stepcounter{footnote}%
+\boxtakeaway{\textbf{Takeaway T5 (Abstraction Scope):}\textsuperscript{\thefootnote}\textit{Maintainers may reject or redirect a deduplication when duplicated code does not share an appropriate abstraction boundary. Consolidating such code into a shared layer can be considered inappropriate when the behavior does not apply uniformly to every component that the layer serves.}}
+\footnotetext{Definição preliminar, em refinamento pelo grupo de pesquisa.}
 \vspace{10pt}
 
 O T5, relacionado ao escopo da abstração, foi associado a cinco das 17 séries de \textit{patches}: 3 foram aceitos após alterações na proposta durante o processo de revisão, e 2 foram rejeitados (Tabela~\ref{tab:patches}). Em um dos casos considerados na formulação desse \textit{takeaway}, o mantenedor comentou:
