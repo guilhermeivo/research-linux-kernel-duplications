@@ -298,27 +298,24 @@ Os objetivos específicos foram alcançados: detecção e seleção de duplicaç
 
 % 3) Plano de atividades para o próximo período (não se aplica ao Relatório Científico Final) (até 2 páginas).
 
-\part{Plano de atividades para o próximo período (prorrogação)}
+\cleardoublepage
 
-%TODO:
-% RQ5 relacionar com o BEPE
+\part{Plano de atividades para o próximo período (prorrogação)}
 
 Este plano reúne as atividades em andamento e as previstas, desenvolvidas em conjunto com o grupo de pesquisa. A Tabela~\ref{tab:cronograma} resume os prazos conhecidos.
 
 \begingroup
 \renewcommand{\labelenumi}{(\alph{enumi})}
 \begin{enumerate}
-    \item \textbf{Conjunto de dados de duplicações em listas de e-mails.} Está em construção, com o grupo de pesquisa, um conjunto de dados sobre duplicações de código em listas de e-mails do kernel Linux, a partir de um subconjunto do \textit{dataset} LKML5Ws\cite{passos2026lkml5ws}, reunindo as duplicações submetidas e as discussões com os mantenedores. Ele busca apoiar pesquisas sobre os motivos que levam à manutenção ou à remoção de código duplicado. O conjunto será submetido ao MSR 2027 (\textit{Data and Tool Showcase Track}), com os dados e a documentação de uso disponíveis no momento da submissão (Apêndice~\ref{apx:trabalhos-em-preparacao}).
-
     \item \textbf{Estratégias de deduplicação.} A caracterização das estratégias adotadas nas contribuições de deduplicação, incluindo as analisadas nesta bolsa, será submetida como \textit{short paper} ao TechDebt 2027. Ela completa a sistematização das lições aprendidas, ao relacionar as estratégias aos \textit{takeaways} T1 a T5 (Apêndice~\ref{apx:trabalhos-em-preparacao}).
 
-    \item \textbf{Análise de duplicações temporais no \texttt{ArKanjo}.} Análise da evolução das duplicações ao longo do histórico do kernel Linux. Estão previstos a execução da detecção sobre versões sucessivas e o rastreamento dos clones em nível de \textit{commits}. A partir desse rastreamento, será investigada a relação entre duplicação e correções de \textit{bugs} inconsistentes, isto é, correções aplicadas a apenas uma das cópias de um trecho duplicado, verificando se e quando a correção chegou às demais.
+    \item \textbf{Conjunto de dados de duplicações em listas de e-mails.} Está em construção, com o grupo de pesquisa, um conjunto de dados sobre duplicações de código em listas de e-mails do kernel Linux, a partir de um subconjunto do \textit{dataset} LKML5Ws\cite{passos2026lkml5ws}, reunindo as duplicações submetidas e as discussões com os mantenedores. Ele busca apoiar pesquisas sobre os motivos que levam à manutenção ou à remoção de código duplicado. O conjunto será submetido ao MSR 2027 (\textit{Data and Tool Showcase Track}), com os dados e a documentação de uso disponíveis no momento da submissão (Apêndice~\ref{apx:trabalhos-em-preparacao}).
+
+    \item \textbf{Análise de duplicações temporais no \texttt{ArKanjo}.} Análise da evolução das duplicações ao longo do histórico do kernel Linux, com a execução da detecção sobre versões sucessivas e o rastreamento dos clones em nível de \textit{commits}. A partir desse rastreamento, será investigada a relação entre duplicação e correções de \textit{bugs} inconsistentes, isto é, correções aplicadas a apenas uma das cópias de um trecho duplicado, verificando se e quando a correção chegou às demais. A execução da detecção sobre versões sucessivas, o rastreamento dos clones em nível de \textit{commits} e a análise das correções inconsistentes serão realizados durante um estágio de pesquisa no exterior (BEPE) de quatro meses na Universidade Rey Juan Carlos (URJC), Espanha, cujo grupo atua em mineração de repositórios e evolução de software. A proposta será submetida à Chamada BEPE Iniciação Científica 2026 da FAPESP, com resultado previsto para março de 2027.
 
     \item \textbf{Visualizações das duplicações.} Continuidade do desenvolvimento das visualizações interativas dos resultados do \texttt{ArKanjo} (Seção~\ref{sec:visualizacoes}), com o refinamento das visões existentes.
 \end{enumerate}
 \endgroup
-
-% TODO: preencher periodos
 
 \begin{table}[htbp]
 \centering
@@ -328,10 +325,11 @@ Este plano reúne as atividades em andamento e as previstas, desenvolvidas em co
 \toprule
 \textbf{Períodos} & \textbf{Entregável} \\
 \midrule
-& Conjunto de dados e artigo (MSR 2027) \\
-& \textit{Short paper} (TechDebt 2027) \\
-& Extensão do \texttt{ArKanjo} com análise temporal e de correções inconsistentes \\
-& Visualizações aprimoradas; possível artigo \\
+Out/2026 -- Jan/2027 & \textit{Short paper} (TechDebt 2027) \\
+Nov/2026 -- Jan/2027 & \textit{Data and Tool Showcase Track} (MSR 2027) \\
+Nov/2026 -- Dez/2026 & Submissão da proposta BEPE à FAPESP (prazo: 11/12/2026) \\
+Mar/2027 -- Jun/2027 (previsto) & BEPE na URJC (4 meses, sujeito à aprovação pela FAPESP): execução do \texttt{ArKanjo} sobre versões sucessivas do kernel; rastreamento dos clones por \textit{commit} e análise das correções inconsistentes \\
+(a confirmar) & Visualizações aprimoradas; possível artigo \\
 \bottomrule
 \end{tabularx}
 \end{table}
